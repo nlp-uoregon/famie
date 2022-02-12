@@ -1,0 +1,34 @@
+.. trankit documentation master file, created by
+   sphinx-quickstart on March 31 10:21:23 2021.
+   You can adapt this file completely to your liking, but it should at least
+   contain the root `toctree` directive.
+
+FaMIE's Documentation
+================================================
+
+FAMIE: A Fast Active Learning Framework for Multilingual Information Extraction
+
+FAMIE's Github Repo is available at: https://github.com/nlp-uoregon/famie
+
+FAMIE's Demo Website is hosted at: http://nlp.uoregon.edu:9000
+
+Citation
+========
+If you use FaMIE in your research or software. Please cite `our following paper <https://arxiv.org/pdf/2101.03289.pdf>`_:
+
+.. code-block:: bibtex
+
+   @aricle{nguyen2021trankit,
+      title={FAMIE: A Fast Active Learning Framework for Multilingual Information Extraction},
+      author={Nguyen, Minh Van and Ngo, Nghia Trung and Nguyen, Thien Huu},
+      year={2021}
+   }
+
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Introduction
+
+   installation
+   overview
+   howitworks
