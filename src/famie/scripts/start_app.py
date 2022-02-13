@@ -23,9 +23,6 @@ def main(args):
     config = read_config()
     flask_port = config["DEFAULT"]["FLASK_PORT"]
 
-    if not os.environ.get("WERKZEUG_RUN_MAIN"):
-        webbrowser.open_new('http://127.0.0.1:8888/')
-
     from famie.api import create_app
 
     application = create_app()
