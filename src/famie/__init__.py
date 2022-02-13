@@ -2,6 +2,70 @@ import os, json, shutil
 from collections import namedtuple
 
 
+def load_model_from_file(saved_fpath):
+    if not os.path.exists(saved_fpath):
+        print('{} does not exist!'.format(saved_fpath))
+        return None
+
+    from famie.api.active_learning.models import SeqLabel, XLMRobertaTokenizer, OUTPUT_DIR, WORKING_DIR
+
+    import torch
+    import trankit
+
+    saved_ckpt = torch.load(saved_fpath)
+
+    config = namedtuple('Config', field_names=[
+        'cache_dir',
+        'target_embedding_name',
+        'proxy_embedding_name',
+        'proxy_reduction_factor',
+        'target_reduction_factor',
+        'embedding_dropout',
+        'vocabs',
+        'hidden_num'
+    ])
+
+    config.cache_dir = os.path.join(WORKING_DIR, 'resource')
+    config.target_embedding_name = saved_ckpt['embedding_name']
+    config.proxy_embedding_name = saved_ckpt['embedding_name']
+    config.proxy_reduction_factor = 2
+    config.target_reduction_factor = 4
+    config.embedding_dropout = 0.4
+    config.vocabs = {
+        self.project_name: saved_ckpt['vocabs']
+    }
+    config.hidden_num = 200
+    config.max_sent_length = 200
+    config.use_gpu = True if torch.cuda.is_available() else False
+
+    config.trankit_tokenizer = trankit.Pipeline(saved_ckpt['lang'],
+                                                cache_dir=os.path.join(WORKING_DIR, 'cache/trankit'))
+    config.target_tokenizer = XLMRobertaTokenizer.from_pretrained(config.target_embedding_name,
+                                                                  cache_dir=os.path.join(config.cache_dir,
+                                                                                         config.target_embedding_name),
+                                                                  do_lower_case=False)
+
+    trained_model = SeqLabel(
+        config=config,
+        project_id=self.project_name,
+        model_name='target'
+    )
+    if config.use_gpu:
+        trained_model.cuda()
+
+    trained_model.half()
+
+    trained_model.eval()
+    trained_weights = saved_ckpt['weights']
+    for name, param in trained_model.state_dict().items():
+        if name not in trained_weights:
+            trained_weights[name] = param
+
+    trained_model.load_state_dict(trained_weights)
+
+    return trained_model
+
+
 class Project:
     def __init__(self, project_name):
         self.project_name = project_name
@@ -49,13 +113,14 @@ class Project:
     def get_trained_model(self):
         from famie.api.active_learning.models import SeqLabel, XLMRobertaTokenizer, OUTPUT_DIR, WORKING_DIR
 
-        import torch
-        import trankit
-
         saved_fpath = os.path.join(OUTPUT_DIR, self.project_name, 'target_output_weights.ckpt')
         if not os.path.exists(saved_fpath):
             print('{} does not exist!'.format(saved_fpath))
             return None
+
+        import torch
+        import trankit
+
         saved_ckpt = torch.load(saved_fpath)
 
         config = namedtuple('Config', field_names=[

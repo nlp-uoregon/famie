@@ -128,5 +128,12 @@ def export_labels_api():
     if not project_name:
         raise Exception("Project name undefined")
 
-    return data.getvalue()
+    labeled_fpath = os.path.join(OUTPUT_DIR, project_name, 'labeled-data.json')
+    if not os.path.exists(labeled_fpath):
+        print('{} does not exist!'.format(labeled_fpath))
+        return ''
+    else:
+        with open(labeled_fpath) as f:
+            data = json.load(f)
+        return json.dumps({'project_name': project_name, 'data': data})
 

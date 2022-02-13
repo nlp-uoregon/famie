@@ -35,6 +35,9 @@ def main(args):
 
     application.config.from_mapping(config.items("DEFAULT"))
 
+    print('FAMIE`s Web Interface is available at: http://127.0.0.1:8888/')
+    print('-' * 50)
+
     application.run(debug=False,
                     port=flask_port,
                     host='0.0.0.0')
