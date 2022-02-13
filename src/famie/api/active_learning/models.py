@@ -293,93 +293,6 @@ class CRF(nn.Module):
 
         return scores, paths
 
-    def viterbi_decode_top_kbest(self, padded_logits, lens, nbest):
-        """
-        modified from https://github.com/Alibaba-NLP/MultilangStructureKD/blob/master/flair/CRF.py
-        """
-        batch_size = padded_logits.size(0)
-        seq_len = padded_logits.size(1)
-        tag_size = padded_logits.size(2)
-
-        mask = sequence_mask(lens, max_len=seq_len)
-        length_mask = torch.sum(mask.long(), dim=1).view(batch_size, 1).long()
-        mask = mask.transpose(1, 0).contiguous()
-        ins_num = seq_len * batch_size
-        padded_logits = padded_logits.transpose(1, 0).contiguous().view(ins_num, 1, tag_size).expand(ins_num, tag_size,
-                                                                                                     tag_size)
-        scores = padded_logits + self.transition.transpose(1, 0).view(1, tag_size, tag_size).expand(ins_num, tag_size,
-                                                                                                    tag_size)
-        scores = scores.view(seq_len, batch_size, tag_size, tag_size)
-
-        seq_iter = enumerate(scores)
-        back_points = list()
-        partition_history = list()
-        mask = (1 - mask.long()).byte()
-        _, inivalues = next(seq_iter)
-        partition = inivalues[:, self.start, :].clone()
-        partition_history.append(partition.view(batch_size, tag_size, 1).expand(batch_size, tag_size, nbest))
-
-        for idx, cur_values in seq_iter:
-            if idx == 1:
-                cur_values = cur_values.view(batch_size, tag_size, tag_size) + partition.contiguous().view(batch_size,
-                                                                                                           tag_size,
-                                                                                                           1).expand(
-                    batch_size, tag_size, tag_size)
-            else:
-                cur_values = cur_values.view(batch_size, tag_size, 1, tag_size).expand(batch_size, tag_size, nbest,
-                                                                                       tag_size) + partition.contiguous().view(
-                    batch_size, tag_size, nbest, 1).expand(batch_size, tag_size, nbest, tag_size)
-                cur_values = cur_values.view(batch_size, tag_size * nbest, tag_size)
-            partition, cur_bp = torch.topk(cur_values, nbest, 1)
-            if idx == 1:
-                cur_bp = cur_bp * nbest
-            partition = partition.transpose(2, 1)
-            cur_bp = cur_bp.transpose(2, 1)
-            partition_history.append(partition)
-            cur_bp.masked_fill_(mask[idx].view(batch_size, 1, 1).expand(batch_size, tag_size, nbest), 0)
-            back_points.append(cur_bp)
-        partition_history = torch.cat(partition_history, 0).view(seq_len, batch_size, tag_size, nbest).transpose(1,
-                                                                                                                 0).contiguous()  ## (batch_size, seq_len, nbest, tag_size)
-        last_position = length_mask.view(batch_size, 1, 1, 1).expand(batch_size, 1, tag_size, nbest) - 1
-        last_partition = torch.gather(partition_history, 1, last_position).view(batch_size, tag_size, nbest, 1)
-        last_values = last_partition.expand(batch_size, tag_size, nbest, tag_size) + self.transition.transpose(1,
-                                                                                                               0).view(
-            1, tag_size,
-            1,
-            tag_size).expand(
-            batch_size, tag_size, nbest, tag_size)
-        last_values = last_values.view(batch_size, tag_size * nbest, tag_size)
-        end_partition, end_bp = torch.topk(last_values, nbest, 1)
-
-        end_bp = end_bp.transpose(2, 1)
-        pad_zero = autograd.Variable(torch.zeros(batch_size, tag_size, nbest)).long()
-        pad_zero = pad_zero.cuda()
-        back_points.append(pad_zero)
-        back_points = torch.cat(back_points).view(seq_len, batch_size, tag_size, nbest)
-
-        pointer = end_bp[:, self.end, :]  ## (batch_size, nbest)
-        insert_last = pointer.contiguous().view(batch_size, 1, 1, nbest).expand(batch_size, 1, tag_size, nbest)
-        back_points = back_points.transpose(1, 0).contiguous()
-
-        back_points.scatter_(1, last_position, insert_last)
-
-        back_points = back_points.transpose(1, 0).contiguous()
-
-        decode_idx = autograd.Variable(torch.LongTensor(seq_len, batch_size, nbest))
-        decode_idx = decode_idx.cuda()
-        decode_idx[-1] = pointer.data / nbest
-
-        for idx in range(len(back_points) - 2, -1, -1):
-            new_pointer = torch.gather(back_points[idx].view(batch_size, tag_size * nbest), 1,
-                                       pointer.contiguous().view(batch_size, nbest))
-            decode_idx[idx] = new_pointer.data / nbest
-            pointer = new_pointer + pointer.contiguous().view(batch_size, nbest) * mask[idx].view(batch_size, 1).expand(
-                batch_size, nbest).long()
-
-        decode_idx = decode_idx.transpose(1, 0).transpose(1, 2)
-
-        return decode_idx
-
     def calc_conf_score_(self, logits, labels):
         batch_size, _, _ = logits.size()
 
@@ -452,11 +365,11 @@ class SeqLabel(nn.Module):
             example_ids=['raw-text'],
             texts=[raw_text],
             tokens=[tokens],
-            piece_idxs=torch.cuda.LongTensor([piece_idxs]),
-            attention_masks=torch.cuda.LongTensor([attn_masks]),
+            piece_idxs=torch.cuda.LongTensor([piece_idxs]) if self.config.use_gpu else torch.LongTensor([piece_idxs]),
+            attention_masks=torch.cuda.LongTensor([attn_masks]) if self.config.use_gpu else torch.LongTensor([attn_masks]),
             token_lens=[token_lens],
             label_idxs=[0] * len(tokens),
-            token_nums=torch.cuda.LongTensor([len(tokens)]),
+            token_nums=torch.cuda.LongTensor([len(tokens)]) if self.config.use_gpu else torch.LongTensor([len(tokens)]),
             distill_mask=[0]
         )
 

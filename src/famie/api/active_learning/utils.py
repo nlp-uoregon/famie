@@ -18,82 +18,12 @@ from collections import Counter, namedtuple, defaultdict
 import torch
 from torch.utils.data import Dataset, DataLoader
 import torch.nn as nn
+from .constants import *
 
-code2lang = {
-    'af': 'afrikaans', 'ar': 'arabic', 'hy': 'armenian', 'eu': 'basque', 'be': 'belarusian', 'bg': 'bulgarian',
-    'ca': 'catalan', 'zh': 'chinese', 'hr': 'croatian', 'cs': 'czech',
-    'da': 'danish', 'nl': 'dutch', 'en': 'english', 'et': 'estonian', 'fi': 'finnish', 'fr': 'french', 'gl': 'galician',
-    'de': 'german', 'el': 'greek', 'he': 'hebrew', 'hi': 'hindi',
-    'hu': 'hungarian', 'id': 'indonesian', 'ga': 'irish', 'it': 'italian', 'ja': 'japanese', 'kk': 'kazakh',
-    'ko': 'korean', 'ku': 'kurmanji', 'la': 'latin', 'lv': 'latvian',
-    'lt': 'lithuanian', 'mr': 'marathi', 'nn': 'norwegian-nynorsk', 'nb': 'norwegian-bokmaal', 'fa': 'persian',
-    'pl': 'polish', 'pt': 'portuguese', 'ro': 'romanian',
-    'ru': 'russian', 'sr': 'serbian', 'sk': 'slovak', 'sl': 'slovenian', 'es': 'spanish',
-    'sv': 'swedish', 'ta': 'tamil', 'te': 'telugu', 'tr': 'turkish',
-    'uk': 'ukrainian', 'ur': 'urdu', 'ug': 'uyghur', 'vi': 'vietnamese'
-}
+for code in CODE2LANG:
+    assert CODE2LANG[code] in trankit.supported_langs
 
-for code in code2lang:
-    assert code2lang[code] in trankit.supported_langs
-
-langid.set_languages([code for code in code2lang])
-
-def ensure_dir(dir_path):
-    os.makedirs(dir_path, exist_ok=True)
-
-
-SUPPORTED_TASKS = {
-    'ner'
-}
-
-DEBUG = True
-
-WORKING_DIR = os.path.dirname(os.path.realpath(__file__))
-DATABASE_DIR = os.path.join(WORKING_DIR, 'database')
-PROJECT_INFO_FPATH = os.path.join(DATABASE_DIR, 'project2info.json')
-LOG_DIR = os.path.join(WORKING_DIR, 'logs')
-
-OUTPUT_DIR = os.path.join(WORKING_DIR, 'famie-output')
-
-SIGNAL_DIR = {'base': os.path.join(WORKING_DIR, 'signals')}
-TASK_NAME_FPATH = os.path.join(SIGNAL_DIR['base'], 'task_name.txt')
-
-ensure_dir(SIGNAL_DIR['base'])
-ensure_dir(DATABASE_DIR)
-
-for task in SUPPORTED_TASKS:
-    SIGNAL_DIR[task] = os.path.join(SIGNAL_DIR['base'], task)
-    ensure_dir(SIGNAL_DIR[task])
-
-LISTEN_TIME = 1
-MAX_EXAMPLES_PER_ITER = 10000  # this should be consistent with:
-# dataqa-ui/src/components/label-page/supervised/SupervisedLabelPage
-
-STOP_CONTROLLER = 'stop-controller'
-
-PAUSE_MODEL = 'pause-model'
-RUN_TARGET = 'run-target'
-RUN_PROXY = 'run-proxy'
-
-SIGNALS = {
-    STOP_CONTROLLER: 'Stop the controller',
-    PAUSE_MODEL: 'Pause model',
-    RUN_TARGET: 'Run the target model',
-    RUN_PROXY: 'Run the proxy model'
-}
-
-EMBEDDING2DIM = {
-    'xlm-roberta-large': 1024,
-    'xlm-roberta-base': 768,
-    'nreimers/mMiniLMv2-L12-H384-distilled-from-XLMR-Large': 384,
-    'nreimers/mMiniLMv2-L6-H384-distilled-from-XLMR-Large': 384
-}
-
-if not os.path.exists(PROJECT_INFO_FPATH):
-    with open(PROJECT_INFO_FPATH, 'w') as f:
-        json.dump({}, f)
-
-SPAN_KEYS = ["id", "start", "end", "text", "entity_id"]
+langid.set_languages([code for code in CODE2LANG])
 
 
 def check_entity_form_input(spans):
@@ -333,7 +263,7 @@ def tag_paths_to_spans(paths, token_nums, vocab):
 
 def detect_lang(text):
     detected_code = langid.classify(text)[0]
-    detected_lang = code2lang[detected_code]
+    detected_lang = CODE2LANG[detected_code]
     print('-' * 50)
     print('Detected Language: {}'.format(detected_lang))
     print('-' * 50)
@@ -373,20 +303,9 @@ def convert_to_toklevel(charlevel_spans, charmap, itos_vocab):
     return toklevel_spans
 
 
-proxy_batch_fields = [
-    'example_ids', 'texts', 'tokens', 'piece_idxs', 'attention_masks', 'token_lens',
-    'label_idxs', 'token_nums', 'distill_mask',
-    'tch_lbl_dist', 'transitions'
-]
+ProxyBatch = namedtuple('ProxyBatch', field_names=PROXY_BATCH_FIELDS)
 
-ProxyBatch = namedtuple('ProxyBatch', field_names=proxy_batch_fields)
-
-target_batch_fields = [
-    'example_ids', 'texts', 'tokens', 'piece_idxs', 'attention_masks', 'token_lens',
-    'label_idxs', 'token_nums', 'distill_mask'
-]
-
-TargetBatch = namedtuple('TargetBatch', field_names=target_batch_fields)
+TargetBatch = namedtuple('TargetBatch', field_names=TARGET_BATCH_FIELDS)
 
 
 def subword_tokenize(tokens, tokenizer, max_sent_length):
@@ -590,17 +509,18 @@ class ProxyDataset(Dataset):
                 inst['transitions'] + [0] * (max_token_num - token_num)
             )
 
-        batch_piece_idxs = torch.cuda.LongTensor(batch_piece_idxs)
+        batch_piece_idxs = torch.cuda.LongTensor(batch_piece_idxs) if self.config.use_gpu else torch.LongTensor(batch_piece_idxs)
         batch_attention_masks = torch.cuda.FloatTensor(
+            batch_attention_masks)  if self.config.use_gpu else torch.FloatTensor(
             batch_attention_masks)
 
-        batch_labels = torch.cuda.LongTensor(batch_labels)
-        batch_token_nums = torch.cuda.LongTensor(batch_token_nums)
+        batch_labels = torch.cuda.LongTensor(batch_labels) if self.config.use_gpu else torch.LongTensor(batch_labels)
+        batch_token_nums = torch.cuda.LongTensor(batch_token_nums) if self.config.use_gpu else torch.LongTensor(batch_token_nums)
 
-        batch_tch_lbl_dist = torch.cuda.FloatTensor(batch_tch_lbl_dist)
-        distill_mask = torch.cuda.FloatTensor([len(inst['tch_lbl_dist']) > 0 for inst in batch])
+        batch_tch_lbl_dist = torch.cuda.FloatTensor(batch_tch_lbl_dist) if self.config.use_gpu else torch.FloatTensor(batch_tch_lbl_dist)
+        distill_mask = torch.cuda.FloatTensor([len(inst['tch_lbl_dist']) > 0 for inst in batch]) if self.config.use_gpu else torch.FloatTensor([len(inst['tch_lbl_dist']) > 0 for inst in batch])
 
-        batch_transitions = torch.cuda.FloatTensor(batch_transitions)
+        batch_transitions = torch.cuda.FloatTensor(batch_transitions) if self.config.use_gpu else torch.FloatTensor(batch_transitions)
 
         return ProxyBatch(
             example_ids=example_ids,
@@ -683,14 +603,15 @@ class TargetDataset(Dataset):
             batch_labels.append(inst['label_idxs'] +
                                 [0] * (max_token_num - token_num))
 
-        batch_piece_idxs = torch.cuda.LongTensor(batch_piece_idxs)
+        batch_piece_idxs = torch.cuda.LongTensor(batch_piece_idxs) if self.config.use_gpu else torch.LongTensor(batch_piece_idxs)
         batch_attention_masks = torch.cuda.FloatTensor(
+            batch_attention_masks) if self.config.use_gpu else torch.FloatTensor(
             batch_attention_masks)
 
-        batch_labels = torch.cuda.LongTensor(batch_labels)
-        batch_token_nums = torch.cuda.LongTensor(batch_token_nums)
+        batch_labels = torch.cuda.LongTensor(batch_labels) if self.config.use_gpu else torch.LongTensor(batch_labels)
+        batch_token_nums = torch.cuda.LongTensor(batch_token_nums) if self.config.use_gpu else torch.LongTensor(batch_token_nums)
 
-        batch_distill_mask = torch.cuda.FloatTensor([0 for inst in batch])
+        batch_distill_mask = torch.cuda.FloatTensor([0 for inst in batch]) if self.config.use_gpu else torch.FloatTensor([0 for inst in batch])
 
         return TargetBatch(
             example_ids=example_ids,
@@ -705,13 +626,7 @@ class TargetDataset(Dataset):
         )
 
 
-al_batch_fields = [
-    'example_ids', 'tokens', 'piece_idxs', 'attention_masks', 'token_lens',
-    'labels', 'label_idxs', 'token_nums', 'distill_mask',
-    'tch_lbl_dist', 'transitions'
-]
-
-ALBatch = namedtuple('Batch', field_names=al_batch_fields)
+ALBatch = namedtuple('Batch', field_names=AL_BATCH_FIELDS)
 
 
 class ALDataset(Dataset):
@@ -857,17 +772,18 @@ class ALDataset(Dataset):
                 inst['transitions'] + [0] * (max_token_num - token_num)
             )
 
-        batch_piece_idxs = torch.cuda.LongTensor(batch_piece_idxs)
+        batch_piece_idxs = torch.cuda.LongTensor(batch_piece_idxs) if self.config.use_gpu else torch.LongTensor(batch_piece_idxs)
         batch_attention_masks = torch.cuda.FloatTensor(
+            batch_attention_masks) if self.config.use_gpu else torch.FloatTensor(
             batch_attention_masks)
 
-        batch_labels = torch.cuda.LongTensor(batch_labels)
-        batch_token_nums = torch.cuda.LongTensor(batch_token_nums)
+        batch_labels = torch.cuda.LongTensor(batch_labels) if self.config.use_gpu else torch.LongTensor(batch_labels)
+        batch_token_nums = torch.cuda.LongTensor(batch_token_nums) if self.config.use_gpu else torch.LongTensor(batch_token_nums)
 
-        batch_tch_lbl_dist = torch.cuda.FloatTensor(batch_tch_lbl_dist)
-        distill_mask = torch.cuda.FloatTensor([len(inst['tch_lbl_dist']) > 0 for inst in batch])
+        batch_tch_lbl_dist = torch.cuda.FloatTensor(batch_tch_lbl_dist) if self.config.use_gpu else torch.FloatTensor(batch_tch_lbl_dist)
+        distill_mask = torch.cuda.FloatTensor([len(inst['tch_lbl_dist']) > 0 for inst in batch]) if self.config.use_gpu else torch.FloatTensor([len(inst['tch_lbl_dist']) > 0 for inst in batch])
 
-        batch_transitions = torch.cuda.FloatTensor(batch_transitions)
+        batch_transitions = torch.cuda.FloatTensor(batch_transitions) if self.config.use_gpu else torch.FloatTensor(batch_transitions)
 
         return ALBatch(
             example_ids=example_ids,
@@ -947,7 +863,7 @@ def mnlp_sampling(unlabeled_data, model, tokenizer, config, project_id):
 
 def k_means_clustering(selection_pool, id2example, num_clusters, init_centroids='random', seed=None):
     '''
-    Borrowed from https://github.com/JordanAsh/badge/blob/master/query_strategies/kmeans_sampling.py
+    Modified from https://github.com/JordanAsh/badge/blob/master/query_strategies/kmeans_sampling.py
     '''
     idxs_unlabeled = np.arange(len(selection_pool))
     embeds_unlabeled = np.array([ex['embedding'] for ex in selection_pool])
@@ -993,7 +909,7 @@ def bertkm_sampling(unlabeled_data, model, tokenizer, config, project_id):
 
 def k_means_pp_seeding(selection_pool, id2example, num_clusters, seed):
     '''
-    Borrowed from https://github.com/JordanAsh/badge/blob/master/query_strategies/badge_sampling.py
+    Modified from https://github.com/JordanAsh/badge/blob/master/query_strategies/badge_sampling.py
     '''
     X = np.array([ex['embedding'] for ex in selection_pool])
     ind = np.argmax([np.linalg.norm(s, 2) for s in X])

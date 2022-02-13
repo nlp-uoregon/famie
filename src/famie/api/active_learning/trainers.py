@@ -22,7 +22,8 @@ class ProxyTrainer:
         self.task = task
         self.model = model
         self.project_name = None
-        self.model.cuda()
+        if self.config.use_gpu:
+            self.model.cuda()
 
         self.annotated_data = dataset
 
@@ -211,7 +212,8 @@ class TargetTrainer:
         self.task = task
         self.model = model
         self.project_name = None
-        self.model.cuda()
+        if self.config.use_gpu:
+            self.model.cuda()
 
         self.annotated_data = dataset
 

@@ -1,6 +1,6 @@
-import os, json, trankit
+import os, json, trankit, torch
 from transformers import XLMRobertaTokenizer
-from famie.api.active_learning.utils import WORKING_DIR
+from .constants import WORKING_DIR
 
 
 class Config:
@@ -54,6 +54,11 @@ class Config:
         self.num_examples_per_iter = 50
 
         self.vocabs = {}
+
+        if torch.cuda.is_available():
+            self.use_gpu = True
+        else:
+            self.use_gpu = False
 
 
 config = Config(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'passed_args.json'))

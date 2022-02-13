@@ -7,7 +7,7 @@ class Project:
         self.project_name = project_name
 
     def get_labeled_data(self):
-        from famie.api.active_learning.utils import OUTPUT_DIR
+        from famie.api.active_learning.constants import OUTPUT_DIR
         labeled_fpath = os.path.join(OUTPUT_DIR, self.project_name, 'labeled-data.json')
         if not os.path.exists(labeled_fpath):
             print('{} does not exist!'.format(labeled_fpath))
@@ -18,7 +18,7 @@ class Project:
             return data
 
     def export_labeled_data(self, output_fpath):
-        from famie.api.active_learning.utils import OUTPUT_DIR
+        from famie.api.active_learning.constants import OUTPUT_DIR
         labeled_fpath = os.path.join(OUTPUT_DIR, self.project_name, 'labeled-data.json')
         if not os.path.exists(labeled_fpath):
             print('{} does not exist!'.format(labeled_fpath))
@@ -26,13 +26,13 @@ class Project:
         else:
             with open(labeled_fpath) as f:
                 data = json.load(f)
-
+            print('Exporting trained model to `{}` ...'.format(output_fpath))
             with open(output_fpath, 'w') as f:
                 json.dump(data, f, ensure_ascii=False)
-
+            print('Done!')
 
     def export_trained_model(self, output_fpath):
-        from famie.api.active_learning.models import SeqLabel, XLMRobertaTokenizer, OUTPUT_DIR
+        from famie.api.active_learning.constants import OUTPUT_DIR
 
         import torch
         import trankit
@@ -42,7 +42,9 @@ class Project:
             print('{} does not exist!'.format(saved_fpath))
             return None
 
+        print('Exporting trained model to `{}` ...'.format(output_fpath))
         shutil.copy(saved_fpath, output_fpath)
+        print('Done!')
 
     def get_trained_model(self):
         from famie.api.active_learning.models import SeqLabel, XLMRobertaTokenizer, OUTPUT_DIR, WORKING_DIR
@@ -78,8 +80,10 @@ class Project:
         }
         config.hidden_num = 200
         config.max_sent_length = 200
+        config.use_gpu = True if torch.cuda.is_available() else False
 
-        config.trankit_tokenizer = trankit.Pipeline(saved_ckpt['lang'], cache_dir=os.path.join(WORKING_DIR, 'cache/trankit'))
+        config.trankit_tokenizer = trankit.Pipeline(saved_ckpt['lang'],
+                                                    cache_dir=os.path.join(WORKING_DIR, 'cache/trankit'))
         config.target_tokenizer = XLMRobertaTokenizer.from_pretrained(config.target_embedding_name,
                                                                       cache_dir=os.path.join(config.cache_dir,
                                                                                              config.target_embedding_name),
@@ -90,7 +94,11 @@ class Project:
             project_id=self.project_name,
             model_name='target'
         )
-        trained_model.cuda()
+        if config.use_gpu:
+            trained_model.cuda()
+
+        trained_model.half()
+
         trained_model.eval()
         trained_weights = saved_ckpt['weights']
         for name, param in trained_model.state_dict().items():

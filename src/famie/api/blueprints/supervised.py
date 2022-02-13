@@ -51,8 +51,8 @@ def set_classnames():
     return json.dumps(class_names)
 
 
-@supervised_bp.route('/api/update-rules', methods=['POST'])
-def update_rules():
+@supervised_bp.route('/api/start-iteration', methods=['POST'])
+def start_iteration():
     print('-' * 50)
     project_name = request.form['project_name']
     if not project_name:
