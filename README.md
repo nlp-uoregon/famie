@@ -7,7 +7,7 @@
     <a href='https://famie.readthedocs.io/en/latest/?badge=latest'>
     <img src='https://readthedocs.org/projects/famie/badge/?version=latest' alt='Documentation Status' />
     </a>
-    <a href="http://nlp.uoregon.edu/9000">
+    <a href="http://nlp.uoregon.edu:9000/">
         <img alt="Demo Website" src="https://img.shields.io/website/http/famie.readthedocs.io/en/latest/index.html.svg?down_color=red&down_message=offline&up_message=online">
     </a>
     <a href="https://pypi.org/project/famie/">
@@ -22,7 +22,7 @@ FAMIE is a comprehensive  and efficient [active learning]() (AL) toolkit for mul
 
 FAMIE's documentation page: https://famie.readthedocs.io
 
-FAMIE's demo website: http://nlp.uoregon.edu/9000
+FAMIE's demo website: http://nlp.uoregon.edu:9000/
 
 
 ### Installation
