@@ -16,14 +16,6 @@ Citation
 ========
 If you use FaMIE in your research or software. Please cite `our following paper <https://arxiv.org/pdf/2101.03289.pdf>`_:
 
-.. code-block:: bibtex
-
-   @aricle{nguyen2021trankit,
-      title={FAMIE: A Fast Active Learning Framework for Multilingual Information Extraction},
-      author={Nguyen, Minh Van and Ngo, Nghia Trung and Nguyen, Thien Huu},
-      year={2021}
-   }
-
 
 .. toctree::
    :maxdepth: 2
