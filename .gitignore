@@ -128,23 +128,3 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-# src/famie/api/static/bundle.js
-.README.md.swp
-src/famie/api/active_learning/signals/
-src/famie/api/active_learning/database/
-src/famie/api/active_learning/experiments/resource/
-src/famie/api/active_learning/experiments1
-src/famie/api/active_learning/experiments2
-src/famie/api/active_learning/experiments3
-src/famie/api/active_learning/experiments4
-src/famie/api/active_learning/experiments5
-src/famie/api/active_learning/experiments6
-src/famie/api/active_learning/experiments7
-src/famie/api/active_learning/experiments8
-src/famie/api/active_learning/experiments9
-src/famie/api/active_learning/experiments10
-src/famie/api/active_learning/experiments11
-src/famie/api/active_learning/experiments12
-resource/
-src/cache/
-src/famie/api/active_learning/logs/

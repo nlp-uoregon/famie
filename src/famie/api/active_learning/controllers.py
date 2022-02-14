@@ -69,7 +69,7 @@ class Controller:
 
         if not self.is_listening:
             print('-' * 50)
-            print("Switching to project '{}'...".format(project_id))
+            print("Loading models for project '{}'...".format(project_id))
             self.is_listening = True
 
             self.config.vocabs[project_id] = {

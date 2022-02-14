@@ -83,7 +83,9 @@ def upload():
 
     class_names = None
 
-    input_params = (file,
+    input_params = (config,
+                    detect_lang,
+                    file,
                     project_name,
                     project_type,
                     upload_id,

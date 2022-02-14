@@ -82,13 +82,19 @@ def get_examples(project_name):
 
     for ex in examples:
         if ex['example_id'] not in id2annotations:
-            unlabeled.append({
-                'project_name': project_name,
-                'example_id': ex['example_id'],
-                'text': ex['text'],
-                'is_table': False, 'column_names': [], 'rows': [], 'char_starts': [],
-                'label': None, 'manual_label': None, 'rules': []
-            })
+            inst = deepcopy(ex)
+            inst['project_name'] = project_name
+            inst['example_id'] = ex['example_id']
+            inst['text'] = ex['text']
+            inst['is_table'] = False
+            inst['column_names'] = []
+            inst['rows'] = []
+            inst['char_starts'] = []
+            inst['label'] = None
+            inst['manual_label'] = None
+            inst['rules'] = []
+
+            unlabeled.append(inst)
 
     return id2annotations, unlabeled
 
@@ -319,7 +325,8 @@ def subword_tokenize(tokens, tokenizer, max_sent_length):
     piece_idxs = tokenizer.encode(
         s_pieces,
         add_special_tokens=True,
-        max_length=max_sent_length
+        max_length=max_sent_length,
+        truncation=True
     )
     if len(piece_idxs) > max_sent_length or len(piece_idxs) == 0:
         return None, None, None
@@ -339,19 +346,18 @@ class ProxyDataset(Dataset):
         self.distil_file = os.path.join(project_dir, 'distillations.json')
         self.project_annotations = project_annotations
 
-        ######## lang detection #########
-        langid_inputs = []
+        unlabeled_sample = None
         with open(os.path.join(self.project_dir, 'unlabeled-data.json')) as f:
             for line in f:
                 line = line.strip()
                 if line:
-                    d = json.loads(line)
-                    langid_inputs.append(d['text'])
-                    if len(langid_inputs) == 50:
-                        break
-        ####### lang detection #########
+                    unlabeled_sample = json.loads(line)
+                    break
+        if unlabeled_sample:
+            self.lang = unlabeled_sample['lang']
+        else:
+            self.lang = 'english'
 
-        self.lang = detect_lang(text='\n'.join(langid_inputs))
         self.trankit_dir = os.path.join(project_dir, 'trankit_features')
         ensure_dir(self.trankit_dir)
         self.data = []
@@ -403,7 +409,7 @@ class ProxyDataset(Dataset):
 
                     charlevel_spans = self.project_annotations[d['example_id']]
                     if not os.path.exists(os.path.join(self.trankit_dir, '{}.json'.format(d['example_id']))):
-                        tokens = self.config.trankit_tokenizer.tokenize(d['text'], is_sent=True)['tokens']
+                        tokens = d['tokens']
                         ######### subword tokenization #######
                         proxy_piece_idxs, proxy_attn_masks, proxy_token_lens = subword_tokenize(
                             tokens, self.config.proxy_tokenizer,
@@ -509,18 +515,24 @@ class ProxyDataset(Dataset):
                 inst['transitions'] + [0] * (max_token_num - token_num)
             )
 
-        batch_piece_idxs = torch.cuda.LongTensor(batch_piece_idxs) if self.config.use_gpu else torch.LongTensor(batch_piece_idxs)
+        batch_piece_idxs = torch.cuda.LongTensor(batch_piece_idxs) if self.config.use_gpu else torch.LongTensor(
+            batch_piece_idxs)
         batch_attention_masks = torch.cuda.FloatTensor(
-            batch_attention_masks)  if self.config.use_gpu else torch.FloatTensor(
+            batch_attention_masks) if self.config.use_gpu else torch.FloatTensor(
             batch_attention_masks)
 
         batch_labels = torch.cuda.LongTensor(batch_labels) if self.config.use_gpu else torch.LongTensor(batch_labels)
-        batch_token_nums = torch.cuda.LongTensor(batch_token_nums) if self.config.use_gpu else torch.LongTensor(batch_token_nums)
+        batch_token_nums = torch.cuda.LongTensor(batch_token_nums) if self.config.use_gpu else torch.LongTensor(
+            batch_token_nums)
 
-        batch_tch_lbl_dist = torch.cuda.FloatTensor(batch_tch_lbl_dist) if self.config.use_gpu else torch.FloatTensor(batch_tch_lbl_dist)
-        distill_mask = torch.cuda.FloatTensor([len(inst['tch_lbl_dist']) > 0 for inst in batch]) if self.config.use_gpu else torch.FloatTensor([len(inst['tch_lbl_dist']) > 0 for inst in batch])
+        batch_tch_lbl_dist = torch.cuda.FloatTensor(batch_tch_lbl_dist) if self.config.use_gpu else torch.FloatTensor(
+            batch_tch_lbl_dist)
+        distill_mask = torch.cuda.FloatTensor(
+            [len(inst['tch_lbl_dist']) > 0 for inst in batch]) if self.config.use_gpu else torch.FloatTensor(
+            [len(inst['tch_lbl_dist']) > 0 for inst in batch])
 
-        batch_transitions = torch.cuda.FloatTensor(batch_transitions) if self.config.use_gpu else torch.FloatTensor(batch_transitions)
+        batch_transitions = torch.cuda.FloatTensor(batch_transitions) if self.config.use_gpu else torch.FloatTensor(
+            batch_transitions)
 
         return ProxyBatch(
             example_ids=example_ids,
@@ -603,15 +615,18 @@ class TargetDataset(Dataset):
             batch_labels.append(inst['label_idxs'] +
                                 [0] * (max_token_num - token_num))
 
-        batch_piece_idxs = torch.cuda.LongTensor(batch_piece_idxs) if self.config.use_gpu else torch.LongTensor(batch_piece_idxs)
+        batch_piece_idxs = torch.cuda.LongTensor(batch_piece_idxs) if self.config.use_gpu else torch.LongTensor(
+            batch_piece_idxs)
         batch_attention_masks = torch.cuda.FloatTensor(
             batch_attention_masks) if self.config.use_gpu else torch.FloatTensor(
             batch_attention_masks)
 
         batch_labels = torch.cuda.LongTensor(batch_labels) if self.config.use_gpu else torch.LongTensor(batch_labels)
-        batch_token_nums = torch.cuda.LongTensor(batch_token_nums) if self.config.use_gpu else torch.LongTensor(batch_token_nums)
+        batch_token_nums = torch.cuda.LongTensor(batch_token_nums) if self.config.use_gpu else torch.LongTensor(
+            batch_token_nums)
 
-        batch_distill_mask = torch.cuda.FloatTensor([0 for inst in batch]) if self.config.use_gpu else torch.FloatTensor([0 for inst in batch])
+        batch_distill_mask = torch.cuda.FloatTensor(
+            [0 for inst in batch]) if self.config.use_gpu else torch.FloatTensor([0 for inst in batch])
 
         return TargetBatch(
             example_ids=example_ids,
@@ -630,15 +645,9 @@ ALBatch = namedtuple('Batch', field_names=AL_BATCH_FIELDS)
 
 
 class ALDataset(Dataset):
-    def __init__(self, data, config, distil_file=None, fixed_length=False):
-        self.max_sent_length = 512  # flexible max length
-
-        self.fixed_length = fixed_length
-        if fixed_length:
-            self.max_sent_length = 128
-
+    def __init__(self, data, config):
+        self.max_sent_length = 512
         self.config = config
-        self.distil_file = distil_file
 
         self.data = data
         self.pad_id = None
@@ -653,73 +662,8 @@ class ALDataset(Dataset):
         return self.data[item]
 
     def numberize(self, xlmr_tokenizer, vocabs):
-        # print('-' * 20)
         self.vocabs = vocabs
-        id2tch_lbl_dist = {}
-        id2transitions = {}
         self.pad_id = xlmr_tokenizer.pad_token_id
-
-        if self.config.distill and self.distil_file:
-            with open(self.distil_file) as f:
-                for line in f:
-                    line = line.strip()
-                    if line:
-                        content = json.loads(line)
-                        id2tch_lbl_dist[content['example_id']] = content['signals']['tch_lbl_dist']
-                        id2transitions[content['example_id']] = content['signals']['transitions']
-
-            # print('Loaded distillation signals for {} examples'.format(len(id2tch_lbl_dist)))
-
-        numberized_data = []
-        skipped = 0
-        for d in self.data:
-            tokens = [t['text'] for t in self.config.trankit_tokenizer.tokenize(d['text'], is_sent=True)['tokens']]
-            s_pieces = [[p for p in xlmr_tokenizer.tokenize(w) if p != '▁'] for w in tokens]
-            for ps in s_pieces:
-                if len(ps) == 0:
-                    ps += ['-']
-            s_token_lens = [len(ps) for ps in s_pieces]
-            s_pieces = [p for ps in s_pieces for p in ps]
-            # Pad word pieces with special tokens
-            piece_idxs = xlmr_tokenizer.encode(
-                s_pieces,
-                add_special_tokens=True,
-                max_length=self.max_sent_length
-            )
-            if len(piece_idxs) > self.max_sent_length - 2 or len(piece_idxs) == 0:
-                skipped += 1
-                continue
-            if self.fixed_length:
-                pad_num = self.max_sent_length - len(piece_idxs)
-            else:
-                pad_num = 0
-
-            attn_masks = [1] * len(piece_idxs) + [0] * pad_num
-            piece_idxs = piece_idxs + [xlmr_tokenizer.pad_token_id] * pad_num
-
-            ######### read annotations ###########
-
-            labels = d['entity-labels'] if 'entity-labels' in d else ['O'] * len(tokens)
-            label_idxs = [vocabs['entity-label'].get(label, 0) for label in
-                          labels]
-            inst = {
-                'example_id': d['example_id'],
-                'tokens': tokens,
-                'piece_idxs': piece_idxs,
-                'attention_mask': attn_masks,
-                'token_lens': s_token_lens,
-                'labels': labels,
-                'label_idxs': label_idxs,
-                'tch_lbl_dist': [] if d['example_id'] not in id2tch_lbl_dist else id2tch_lbl_dist[
-                    d['example_id']],
-                'transitions': [0] * (len(tokens) + 1) if d['example_id'] not in id2transitions else
-                id2transitions[d['example_id']]
-            }
-            numberized_data.append(inst)
-
-        self.data = numberized_data
-        # print('Skipped {} examples'.format(skipped))
-        # print('Loaded {} examples!'.format(len(self.data)))
 
     def collate_fn(self, batch):
         example_ids = [inst['example_id'] for inst in batch]
@@ -736,54 +680,29 @@ class ALDataset(Dataset):
                 inst['attention_mask'] = inst['target_attention_mask']
                 inst['token_lens'] = inst['target_token_lens']
 
-                inst['tch_lbl_dist'] = []
-                inst['transitions'] = [0] * (len(inst['tokens']) + 1)
-
         max_piece_num = max([len(inst['piece_idxs']) for inst in batch])
         max_token_num = max(batch_token_nums)
 
         batch_labels = []
 
-        batch_tch_lbl_dist = []
-
-        batch_transitions = []
-
         for inst in batch:
             token_num = len(inst['tokens'])
-            if self.fixed_length:
-                batch_piece_idxs.append(inst['piece_idxs'])
-                batch_attention_masks.append(inst['attention_mask'])
-            else:
-                batch_piece_idxs.append(inst['piece_idxs'] + [self.pad_id] * (max_piece_num - len(inst['piece_idxs'])))
-                batch_attention_masks.append(inst['attention_mask'] + [0] * (max_piece_num - len(inst['piece_idxs'])))
+            batch_piece_idxs.append(inst['piece_idxs'] + [self.pad_id] * (max_piece_num - len(inst['piece_idxs'])))
+            batch_attention_masks.append(inst['attention_mask'] + [0] * (max_piece_num - len(inst['piece_idxs'])))
             batch_token_lens.append(inst['token_lens'])
             # for identification
             batch_labels.append(inst['label_idxs'] +
                                 [0] * (max_token_num - token_num))
 
-            # for distillation
-            batch_tch_lbl_dist.append(
-                inst['tch_lbl_dist'] + [[0] * len(self.vocabs['entity-label'])] * (
-                        max_token_num - len(inst['tch_lbl_dist']))
-            )
-
-            # transition scores
-            batch_transitions.append(
-                inst['transitions'] + [0] * (max_token_num - token_num)
-            )
-
-        batch_piece_idxs = torch.cuda.LongTensor(batch_piece_idxs) if self.config.use_gpu else torch.LongTensor(batch_piece_idxs)
+        batch_piece_idxs = torch.cuda.LongTensor(batch_piece_idxs) if self.config.use_gpu else torch.LongTensor(
+            batch_piece_idxs)
         batch_attention_masks = torch.cuda.FloatTensor(
             batch_attention_masks) if self.config.use_gpu else torch.FloatTensor(
             batch_attention_masks)
 
         batch_labels = torch.cuda.LongTensor(batch_labels) if self.config.use_gpu else torch.LongTensor(batch_labels)
-        batch_token_nums = torch.cuda.LongTensor(batch_token_nums) if self.config.use_gpu else torch.LongTensor(batch_token_nums)
-
-        batch_tch_lbl_dist = torch.cuda.FloatTensor(batch_tch_lbl_dist) if self.config.use_gpu else torch.FloatTensor(batch_tch_lbl_dist)
-        distill_mask = torch.cuda.FloatTensor([len(inst['tch_lbl_dist']) > 0 for inst in batch]) if self.config.use_gpu else torch.FloatTensor([len(inst['tch_lbl_dist']) > 0 for inst in batch])
-
-        batch_transitions = torch.cuda.FloatTensor(batch_transitions) if self.config.use_gpu else torch.FloatTensor(batch_transitions)
+        batch_token_nums = torch.cuda.LongTensor(batch_token_nums) if self.config.use_gpu else torch.LongTensor(
+            batch_token_nums)
 
         return ALBatch(
             example_ids=example_ids,
@@ -793,10 +712,7 @@ class ALDataset(Dataset):
             token_lens=batch_token_lens,
             labels=[inst['labels'] for inst in batch],
             label_idxs=batch_labels,
-            token_nums=batch_token_nums,
-            tch_lbl_dist=batch_tch_lbl_dist,
-            transitions=batch_transitions,
-            distill_mask=distill_mask
+            token_nums=batch_token_nums
         )
 
 

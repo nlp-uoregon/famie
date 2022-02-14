@@ -51,7 +51,7 @@ class Config:
         self.selection = passed_args['selection']
         assert self.selection in ['random', 'bertkm', 'badge', 'mnlp']
 
-        self.num_examples_per_iter = 50
+        self.num_examples_per_iter = 100
 
         self.vocabs = {}
 

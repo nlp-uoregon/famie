@@ -84,6 +84,34 @@ TARGET_BATCH_FIELDS = [
 
 AL_BATCH_FIELDS = [
     'example_ids', 'tokens', 'piece_idxs', 'attention_masks', 'token_lens',
-    'labels', 'label_idxs', 'token_nums', 'distill_mask',
-    'tch_lbl_dist', 'transitions'
+    'labels', 'label_idxs', 'token_nums'
 ]
+
+CKPT_KEYS = {'project_name', 'lang', 'embedding_name', 'hidden_num', 'vocabs', 'weights'}
+
+
+def convert_ckpt_to_json(ckpt_fpath):
+    import json, torch
+
+    ckpt = torch.load(ckpt_fpath) if torch.cuda.is_available() else torch.load(ckpt_fpath, map_location=torch.device('cpu'))
+    assert set(ckpt.keys()) == CKPT_KEYS
+
+    for param_name in ckpt['weights']:
+        ckpt['weights'][param_name] = ckpt['weights'][param_name].data.cpu().numpy().tolist()
+
+    return ckpt
+
+
+def convert_json_to_ckpt(json_fpath, use_gpu):
+    import torch
+
+    with open(json_fpath) as f:
+        ckpt = json.load(f)
+
+    assert set(ckpt.keys()) == CKPT_KEYS
+
+    for param_name in ckpt['weights']:
+        ckpt['weights'][param_name] = torch.tensor(ckpt['weights'][param_name]).cuda() if use_gpu else torch.tensor(
+            ckpt['weights'][param_name])
+
+    return ckpt

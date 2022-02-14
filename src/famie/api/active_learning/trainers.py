@@ -10,6 +10,8 @@ for name in logging.root.manager.loggerDict:
     if 'transformers' in name:
         logging.getLogger(name).setLevel(logging.CRITICAL)
 
+logging.disable(logging.WARNING)
+
 logging.basicConfig(format='%(message)s', level=logging.INFO,
                     filename=os.path.join(LOG_DIR, 'training-log.txt'),
                     filemode='w')
@@ -220,8 +222,11 @@ class TargetTrainer:
         ensure_dir(os.path.join(DATABASE_DIR, dataset.project_id))
         ensure_dir(os.path.join(OUTPUT_DIR, dataset.project_id))
 
-        self.init_model_param_fpath = os.path.join(DATABASE_DIR, dataset.project_id, 'target_init_weights.ckpt')
-        self.output_model_param_fpath = os.path.join(OUTPUT_DIR, dataset.project_id, 'target_output_weights.ckpt')
+        self.init_model_param_fpath = os.path.join(DATABASE_DIR, dataset.project_id,
+                                                   'target_init_weights.ckpt')  # torch weights
+
+        self.output_model_param_fpath = os.path.join(OUTPUT_DIR, dataset.project_id,
+                                                     'target_output_weights.ckpt')  # json weights
 
         self.signal = PAUSE_MODEL
 
@@ -276,6 +281,12 @@ class TargetTrainer:
                 continue
             init_state_dict['weights'][name] = param
         torch.save(init_state_dict, save_fpath)
+
+    def save_json_weights(self, save_fpath):
+        self.save_weights(save_fpath)
+        json_ckpt = convert_ckpt_to_json(save_fpath)
+        with open(save_fpath, 'w') as f:
+            json.dump(json_ckpt, f)
 
     def load_init_weights(self):
         self.model.eval()
@@ -346,13 +357,14 @@ class TargetTrainer:
                 progress.update(1)
                 self.model.eval()
             progress.close()
-            self.save_weights(self.output_model_param_fpath)
             precompute_distillation(
                 self.annotated_data.data,
                 self.model,
                 self.config,
                 self.project_name
             )
+            print('Saving trained main model ...')
+            self.save_json_weights(self.output_model_param_fpath)
             print('-' * 50)
             # print('{} | target model: precomputing distillation signals is done!'.format(datetime.now()))
             self.signal = PAUSE_MODEL

@@ -183,4 +183,12 @@ def export_rules():
     if not project_name:
         raise Exception("Project name undefined")
 
-    return ''
+    saved_fpath = os.path.join(OUTPUT_DIR, project_name, 'target_output_weights.ckpt')
+    if not os.path.exists(saved_fpath):
+        print('{} does not exist!'.format(saved_fpath))
+        return json.dumps({})
+
+    with open(saved_fpath) as f:
+        json_ckpt = f.read()
+
+    return json_ckpt
