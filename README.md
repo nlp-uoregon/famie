@@ -36,7 +36,7 @@ The main features of **FAMIE** are:
 
 #### Proxy Active Learning
 <p float="left" align="middle">
-  <img src="pics/full-process-color.png" width="400" />
+  <img src="pics/full-process-color.png" width="500" />
 </p>
 
 Incorporating current large-scale language models into traditional AL process would dramatically increase the model training time, thus introducing a long idle time for annotators that might reduce annotation quality and
@@ -99,13 +99,13 @@ Given one annotation batch in an iteration, annotators label one sentence at a t
 <p align="middle">
   <!-- <img src="pics/1_select_label.png" width="150" /> -->
   <!-- <img src="pics/2_anno_span.png" width="150" />  -->
-  <img src="pics/3_save_next.png" width="250" />
+  <img src="pics/3_save_next.png" width="400" />
   <!-- <img src="pics/4_fin_prox.png" width="150" /> -->
 </p>
 
 After finishing each iteration, FAMIE then allows users to download the trained models and annotated data of the current round via the web interface.
 <p align="middle">
-  <img src="pics/download.png" width="250" />
+  <img src="pics/download.png" width="400" />
 </p>
 
 #### Accessing the labeled data and the trained model with **famie** package
