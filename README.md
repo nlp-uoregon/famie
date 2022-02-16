@@ -36,7 +36,7 @@ The main features of **FAMIE** are:
 
 #### Proxy Active Learning
 <p float="left" align="middle">
-  <img src="pics/full-process-color.png" width="300" />
+  <img src="pics/full-process-color.png" width="400" />
 </p>
 
 Incorporating current large-scale language models into traditional AL process would dramatically increase the model training time, thus introducing a long idle time for annotators that might reduce annotation quality and
