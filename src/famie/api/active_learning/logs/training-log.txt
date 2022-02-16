@@ -1,0 +1,63 @@
+Exception on /api/start-iteration [POST]
+Traceback (most recent call last):
+  File "/projects/uonlp/nghian/miniconda3/envs/famie/lib/python3.8/site-packages/flask/app.py", line 2073, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/projects/uonlp/nghian/miniconda3/envs/famie/lib/python3.8/site-packages/flask/app.py", line 1518, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/projects/uonlp/nghian/miniconda3/envs/famie/lib/python3.8/site-packages/flask/app.py", line 1516, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/projects/uonlp/nghian/miniconda3/envs/famie/lib/python3.8/site-packages/flask/app.py", line 1502, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**req.view_args)
+  File "/gpfs/projects/uonlp/shared/famie/src/famie/api/blueprints/supervised.py", line 77, in start_iteration
+    al_controllers[project_type].listen(project_state={
+  File "/gpfs/projects/uonlp/shared/famie/src/famie/api/active_learning/controllers.py", line 88, in listen
+    'proxy': ProxyDataset(self.config, project_id, project_dir, project_annotations),
+  File "/gpfs/projects/uonlp/shared/famie/src/famie/api/active_learning/utils.py", line 364, in __init__
+    self.numberize()
+  File "/gpfs/projects/uonlp/shared/famie/src/famie/api/active_learning/utils.py", line 424, in numberize
+    toklevel_spans = convert_to_toklevel(charlevel_spans, charmap, itos_vocab)
+  File "/gpfs/projects/uonlp/shared/famie/src/famie/api/active_learning/utils.py", line 307, in convert_to_toklevel
+    'type': itos_vocab[span['entity_id']]
+KeyError: 0
+Exception on /api/start-iteration [POST]
+Traceback (most recent call last):
+  File "/projects/uonlp/nghian/miniconda3/envs/famie/lib/python3.8/site-packages/flask/app.py", line 2073, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/projects/uonlp/nghian/miniconda3/envs/famie/lib/python3.8/site-packages/flask/app.py", line 1518, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/projects/uonlp/nghian/miniconda3/envs/famie/lib/python3.8/site-packages/flask/app.py", line 1516, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/projects/uonlp/nghian/miniconda3/envs/famie/lib/python3.8/site-packages/flask/app.py", line 1502, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**req.view_args)
+  File "/gpfs/projects/uonlp/shared/famie/src/famie/api/blueprints/supervised.py", line 77, in start_iteration
+    al_controllers[project_type].listen(project_state={
+  File "/gpfs/projects/uonlp/shared/famie/src/famie/api/active_learning/controllers.py", line 88, in listen
+    'proxy': ProxyDataset(self.config, project_id, project_dir, project_annotations),
+  File "/gpfs/projects/uonlp/shared/famie/src/famie/api/active_learning/utils.py", line 364, in __init__
+    self.numberize()
+  File "/gpfs/projects/uonlp/shared/famie/src/famie/api/active_learning/utils.py", line 424, in numberize
+    toklevel_spans = convert_to_toklevel(charlevel_spans, charmap, itos_vocab)
+  File "/gpfs/projects/uonlp/shared/famie/src/famie/api/active_learning/utils.py", line 307, in convert_to_toklevel
+    'type': itos_vocab[span['entity_id']]
+KeyError: 0
+Exception on /api/start-iteration [POST]
+Traceback (most recent call last):
+  File "/projects/uonlp/nghian/miniconda3/envs/famie/lib/python3.8/site-packages/flask/app.py", line 2073, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/projects/uonlp/nghian/miniconda3/envs/famie/lib/python3.8/site-packages/flask/app.py", line 1518, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/projects/uonlp/nghian/miniconda3/envs/famie/lib/python3.8/site-packages/flask/app.py", line 1516, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/projects/uonlp/nghian/miniconda3/envs/famie/lib/python3.8/site-packages/flask/app.py", line 1502, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**req.view_args)
+  File "/gpfs/projects/uonlp/shared/famie/src/famie/api/blueprints/supervised.py", line 77, in start_iteration
+    al_controllers[project_type].listen(project_state={
+  File "/gpfs/projects/uonlp/shared/famie/src/famie/api/active_learning/controllers.py", line 88, in listen
+    'proxy': ProxyDataset(self.config, project_id, project_dir, project_annotations),
+  File "/gpfs/projects/uonlp/shared/famie/src/famie/api/active_learning/utils.py", line 364, in __init__
+    self.numberize()
+  File "/gpfs/projects/uonlp/shared/famie/src/famie/api/active_learning/utils.py", line 424, in numberize
+    toklevel_spans = convert_to_toklevel(charlevel_spans, charmap, itos_vocab)
+  File "/gpfs/projects/uonlp/shared/famie/src/famie/api/active_learning/utils.py", line 307, in convert_to_toklevel
+    'type': itos_vocab[span['entity_id']]
+KeyError: 0

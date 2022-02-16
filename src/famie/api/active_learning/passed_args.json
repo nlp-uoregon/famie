@@ -1,0 +1,1 @@
+{"selection": "mnlp", "proxy_embedding": "nreimers/mMiniLMv2-L6-H384-distilled-from-XLMR-Large", "target_embedding": "xlm-roberta-base"}
