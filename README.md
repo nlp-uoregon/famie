@@ -20,42 +20,25 @@
 
 ### Introduction
 
-FAMIE is a comprehensive  and efficient [active learning]() (AL) toolkit for multilingual information extraction (IE). FAMIE is designed to address a fundamental problem in existing AL frameworks where annotators need to wait for a long time between annotation batches due to the time-consuming nature of model training and data selection at each AL iteration. With a novel proxy AL mechanism and the integration of our SOTA multilingual toolkit [Trankit](https://github.com/nlp-uoregon/trankit), FAMIE can quickly provide users with a labeled dataset and a ready-to-use model for different IE tasks over [100 languages](https://trankit.readthedocs.io/en/latest/pkgnames.html#trainable-languages).
+FAMIE is a comprehensive  and efficient **active learning** (AL) toolkit for **multilingual information extraction** (IE). FAMIE is designed to address a fundamental problem in existing AL frameworks where annotators need to wait for a long time between annotation batches due to the time-consuming nature of model training and data selection at each AL iteration. With a novel [proxy AL mechanism](https://famie.readthedocs.io/en/latest/howitworks.html) and the integration of our SOTA multilingual toolkit [Trankit](https://github.com/nlp-uoregon/trankit), **it takes FAMIE only a few hours to provide users with a labeled dataset and a ready-to-use model for different IE tasks over [100 languages](https://trankit.readthedocs.io/en/latest/pkgnames.html#trainable-languages)**.
+
+If you use FAMIE in your research or products, please cite our following paper:
+```bibtex
+@misc{vannguyen2022famie,
+      title={FAMIE: A Fast Active Learning Framework for Multilingual Information Extraction}, 
+      author={Nguyen, Minh Van and Ngo, Nghia Trung and Min, Bonan and Nguyen, Thien Huu},
+      year={2022},
+      eprint={2202.08316},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL}
+}
+```
+
+FAMIE's technical paper: https://arxiv.org/pdf/2202.08316.pdf
 
 FAMIE's documentation page: https://famie.readthedocs.io
 
 FAMIE's demo website: http://nlp.uoregon.edu:9000/
-
-The main features of **FAMIE** are:
-
-+ Wide-support: FAMIE supports multilingual IE tasks for over 100 languages with a state-of-the-art set of active learning algorithms.
-
-+ Fast Active Learning: FAMIE significantly reduces idle times of annotators in an AL procedure by introducing a compact proxy model to select unlabeled samples while parallelizing the retraining of the large-scale main model and annotation process.
-
-+ Model-centric: In an AL procedure, the resulting labeled dataset is coupled with the main model involved in the selection process (ie. best performance can only be achieved by retraining the exact model on this dataset). However, previous AL toolkits focus only on their web interfaces to produce labeled data with no access to the corresponding model. In contrast, FAMIE provides a simple and intuitive code interface for interacting with **both** the produced labeled dataset and the trained main model after the AL process.
-
-#### Proxy Active Learning
-<p float="left" align="middle">
-  <img src="pics/full-process-color.png" width="500" />
-</p>
-
-Incorporating current large-scale language models into traditional AL process would dramatically increase the model training time, thus introducing a long idle time for annotators that might reduce annotation quality and
-quantity. To address this issue without sacrificing final performance, FAMIE introduces **Proxy Active Learning**. In particular, a small proxy model is used to unlabeled data selection, while the main model is trained during the long annotation time of the annotators (i.e., main model training and data annotation are done in parallel). Given the main model trained at previous iteration, knowledge distillation will be employed to synchronize the knowledge between the main and proxy models at the current iteration.
-
-
-#### Active Learning Algorithm
-Currently, **FAMIE** supports the following data selection algorithms for active learning:
-
-+ Uncertainty-based ([MNLP](https://arxiv.org/abs/1707.05928)) select examples for annotation according to the main model’s length-normalized confidence over the predicted tag sequences for unlabeled examples
-
-+ Diversity-based ([BERT-KM](https://aclanthology.org/2020.emnlp-main.637/)) uses K-Means to cluster
-the examples in unlabeled data based on the contextualized embeddings of the sentences
-
-+ Hybrid ([BADGE](https://arxiv.org/abs/1906.03671)) chooses examples from clusters of gradient embeddings, which are formed with the token representations from the penultimate layer of the main
-model and the gradients of the cross-entropy loss
-with respect to such token representations
-
-<!-- We provide comprehensive experiments to suggest which algorithms user should choose. See [Data Selection Algorithms]() -->
 
 ### Installation
 FAMIE can be easily installed via one of the following methods:
@@ -88,14 +71,8 @@ This will run a server on users' local machines (no data or models will leave us
 . As FAMIE is an AL framework, it provides different data selection algorithms that recommend users the most beneficial examples to label at each annotation iteration. This is done via passing an optional argument `--selection [mnlp|badge|bertkm|random]`.
 
 #### Annotating data
-
-<!-- After initiating a new project and uploading an unlabeled dataset file with a entity type file (in text format), annotators are presented with a data statistic page. clicking on the bottom left conner would start the labeling process.
-
-for each sample, annotators first select a label from dropdown, then proceed to highlight appropriate spans for the corresponding labels.
-Continue till no more entity in given example, proceed by clicking save button and next arrow
-After finishing labled all current  -->
 After initiating a new project and uploading an unlabeled dataset file with an entity types file (in text format), annotators can start the annotation process.
-Given one annotation batch in an iteration, annotators label one sentence at a time, annotating the word spans for each label by first choosing the label and then highlighting the appropriate spans. Also, FAMIE designs the size of the annotation batches to allow enough time to finish the training of the main model during the annotation time at each iteration.
+Given one annotation batch in an iteration, annotators label one sentence at a time, annotating the word spans for each label by first choosing the label and then highlighting the appropriate spans.
 <p align="middle">
   <!-- <img src="pics/1_select_label.png" width="150" /> -->
   <!-- <img src="pics/2_anno_span.png" width="150" />  -->
@@ -103,12 +80,12 @@ Given one annotation batch in an iteration, annotators label one sentence at a t
   <!-- <img src="pics/4_fin_prox.png" width="150" /> -->
 </p>
 
-After finishing each iteration, FAMIE then allows users to download the trained models and annotated data of the current round via the web interface.
+After finishing each iteration, FAMIE then allows users to download the trained models and annotated data by clicking on the buttons **DOWNLOAD LABELED DATA** and **DOWNLOAD TRAINED MODEL**.
 <p align="middle">
   <img src="pics/download.png" width="400" />
 </p>
 
-#### Accessing the labeled data and the trained model with **famie** package
+#### Accessing labeled data and trained models
 
 FAMIE also provides a simple and intuitive code
 interface for interacting with the resulting labeled

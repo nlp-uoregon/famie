@@ -128,3 +128,8 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+src/famie/api/active_learning/database/
+src/famie/api/active_learning/logs/
+src/famie/api/active_learning/passed_args.json
+src/famie/api/active_learning/signals/
+.vscode/
