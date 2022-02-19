@@ -68,6 +68,18 @@ To start an annotation session, please use the following command:
 famie start
 ```
 This will run a server on users' local machines (no data or models will leave users' local machines), users can access FAMIE's web interface via the URL: http://127.0.0.1:9000/
+
+To use FAMIE on a remote server for a local machine, users can run famie on the corresponding server and ssh-forward famie's port (9000) from their local machine:
+```bash
+# On remote
+famie start
+
+# On local
+ssh -NL <local-port>:localhost:<famie-port> <remote-username>@<remote-address>
+
+# Open localhost:9000 on local to access FAMIE's web interface.
+```
+
 . As FAMIE is an AL framework, it provides different data selection algorithms that recommend users the most beneficial examples to label at each annotation iteration. This is done via passing an optional argument `--selection [mnlp|badge|bertkm|random]`.
 
 #### Annotating data
