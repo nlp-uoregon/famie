@@ -73,11 +73,24 @@ To use FAMIE on a remote server for a local machine, users can run famie on the 
 ```bash
 # On remote
 famie start
-
 # On local
 ssh -NL <local-port>:localhost:<famie-port> <remote-username>@<remote-address>
-
 # Open localhost:9000 on local to access FAMIE's web interface.
+```
+
+To use FAMIE on google colab, use [colab-ssh](https://stackoverflow.com/a/61682149) to create an ssh connect to the Colab VM. Then follow the same remote-local process above to run FAMIE on the colab notebook through your local machine.
+```bash
+# On Colab Notebook
+## Install colab_ssh and run ngrok to get ssh address and port
+!pip install colab_ssh --upgrade
+from colab_ssh import launch_ssh
+launch_ssh('YOUR_NGROK_AUTH_TOKEN', 'SOME_PASSWORD')  # return a ssh-address and ssh-port
+## Run FAMIE
+famie start --port <famie-port>
+
+# On local
+ssh -NL <local-port>:localhost:<famie-port> root@<remote-address> -p <ssh-port>
+# Open localhost:<local-port> on local to access FAMIE's web interface.
 ```
 
 . As FAMIE is an AL framework, it provides different data selection algorithms that recommend users the most beneficial examples to label at each annotation iteration. This is done via passing an optional argument `--selection [mnlp|badge|bertkm|random]`.
