@@ -89,7 +89,7 @@ launch_ssh('YOUR_NGROK_AUTH_TOKEN', 'SOME_PASSWORD')  # return a ssh-address and
 famie start --port <famie-port>
 
 # On local
-ssh -NL <local-port>:localhost:<famie-port> root@<remote-address> -p <ssh-port>
+ssh -NL <local-port>:localhost:<famie-port> root@<ssh-address> -p <ssh-port>
 # Open localhost:<local-port> on local to access FAMIE's web interface.
 ```
 
