@@ -63,11 +63,15 @@ FAMIE currently supports Named Entity Recognition and Event Detection for over [
 - Access the labeled data and a ready-to-use model returned by FAMIE.
 
 #### Starting an annotation session
+<ins>Running on local machines</ins>
+
 To start an annotation session, please use the following command:
 ```python
 famie start
 ```
 This will run a server on users' local machines (no data or models will leave users' local machines), users can access FAMIE's web interface via the URL: http://127.0.0.1:9000/
+
+<ins>Running on remote servers</ins>
 
 To use FAMIE on a remote server for a local machine, users can run famie on the corresponding server and ssh-forward famie's port (9000) from their local machine:
 ```bash
@@ -77,6 +81,7 @@ famie start
 ssh -NL <local-port>:localhost:<famie-port> <remote-username>@<remote-address>
 # Open localhost:9000 on local to access FAMIE's web interface.
 ```
+<ins>Running on Google Colab</ins>
 
 To use FAMIE on google colab, use [colab-ssh](https://stackoverflow.com/a/61682149) to create an ssh connect to the Colab VM. Then follow the same remote-local process above to run FAMIE on the colab notebook through your local machine.
 ```bash
@@ -93,7 +98,7 @@ ssh -NL <local-port>:localhost:<famie-port> root@<ssh-address> -p <ssh-port>
 # Open localhost:<local-port> on local to access FAMIE's web interface.
 ```
 
-. As FAMIE is an AL framework, it provides different data selection algorithms that recommend users the most beneficial examples to label at each annotation iteration. This is done via passing an optional argument `--selection [mnlp|badge|bertkm|random]`.
+As FAMIE is an AL framework, it provides different data selection algorithms that recommend users the most beneficial examples to label at each annotation iteration. This is done via passing an optional argument `--selection [mnlp|badge|bertkm|random]`.
 
 #### Annotating data
 After initiating a new project and uploading an unlabeled dataset file with an entity types file (in text format), annotators can start the annotation process.

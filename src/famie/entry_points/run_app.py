@@ -16,6 +16,10 @@ def main():
                               default="mnlp",
                               help="Data selection strategy",
                               choices=['mnlp', 'bertkm', 'badge', 'random'])
+    parser_start.add_argument("--port",
+                              type=str,
+                              default="9000",
+                              help="Port specification")
     parser_start.add_argument("--target_embedding",
                               type=str,
                               default='xlm-roberta-base',

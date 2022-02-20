@@ -21,7 +21,6 @@ def main(args):
     ####################################
 
     config = read_config()
-    flask_port = config["DEFAULT"]["FLASK_PORT"]
 
     from famie.api import create_app
 
@@ -35,9 +34,9 @@ def main(args):
 
     application.config.from_mapping(config.items("DEFAULT"))
 
-    print('FAMIE`s Web Interface is available at: http://127.0.0.1:9000/')
+    print('FAMIE`s Web Interface is available at: http://127.0.0.1:{}/'.format(args.port))
     print('-' * 50)
 
     application.run(debug=False,
-                    port=flask_port,
+                    port=args.port,
                     host='0.0.0.0')
