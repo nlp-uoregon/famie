@@ -12,22 +12,6 @@ FAMIE's github: https://github.com/nlp-uoregon/famie
 
 FAMIE's demo website: http://nlp.uoregon.edu:9000/
 
-Citation
-========
-
-If you use FAMIE in your research or products, please cite our following paper:
-
-.. code-block:: bibtex
-
-   @misc{vannguyen2022famie,
-      title={FAMIE: A Fast Active Learning Framework for Multilingual Information Extraction},
-      author={Nguyen, Minh Van and Ngo, Nghia Trung and Min, Bonan and Nguyen, Thien Huu},
-      year={2022},
-      eprint={2202.08316},
-      archivePrefix={arXiv},
-      primaryClass={cs.CL}
-   }
-
 .. toctree::
    :maxdepth: 2
    :caption: Introduction
