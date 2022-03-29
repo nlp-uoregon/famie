@@ -154,59 +154,72 @@ class ProxyTrainer:
             if self.signal == STOP_CONTROLLER:
                 # print('{} | Stopping proxy model...'.format(datetime.now()))
                 break
-            elif self.signal != RUN_PROXY:
+            elif self.signal not in [RUN_PROXY, PROXY_PREDICTS]:
                 continue
 
-            self.load_init_weights()
+            if self.signal == RUN_PROXY:
+                self.load_init_weights()
 
-            # training set
-            progress = tqdm.tqdm(total=self.config.proxy_max_epoch, ncols=75,
-                                 desc='Retraining proxy model')
+                # training set
+                progress = tqdm.tqdm(total=self.config.proxy_max_epoch, ncols=75,
+                                     desc='Retraining proxy model')
 
-            for epoch in range(self.config.proxy_max_epoch):
-                torch.cuda.empty_cache()
-                if self.signal != RUN_PROXY:
-                    # print('{} | proxy model: breaking epoch'.format(datetime.now()))
-                    break
-                logger.info('proxy model: epoch {}'.format(epoch))
-
-                self.model.train()
-                self.optimizer.zero_grad()
-                losses = []
-                for batch_idx, batch in enumerate(DataLoader(
-                        self.annotated_data, batch_size=self.config.batch_size // self.config.accumulate_step,
-                        shuffle=True, collate_fn=self.annotated_data.collate_fn)):
+                for epoch in range(self.config.proxy_max_epoch):
+                    torch.cuda.empty_cache()
                     if self.signal != RUN_PROXY:
-                        progress.close()
-                        # print('{} | proxy model: breaking step'.format(datetime.now()))
+                        # print('{} | proxy model: breaking epoch'.format(datetime.now()))
                         break
-                    ######################################
-                    loss = self.model(batch)
-                    loss = loss * (1 / self.config.accumulate_step)
+                    logger.info('proxy model: epoch {}'.format(epoch))
 
-                    loss.backward()
+                    self.model.train()
+                    self.optimizer.zero_grad()
+                    losses = []
+                    for batch_idx, batch in enumerate(DataLoader(
+                            self.annotated_data, batch_size=self.config.batch_size // self.config.accumulate_step,
+                            shuffle=True, collate_fn=self.annotated_data.collate_fn)):
+                        if self.signal != RUN_PROXY:
+                            progress.close()
+                            # print('{} | proxy model: breaking step'.format(datetime.now()))
+                            break
+                        ######################################
+                        loss = self.model(batch)
+                        loss = loss * (1 / self.config.accumulate_step)
 
-                    if (batch_idx + 1) % self.config.accumulate_step == 0:
-                        torch.nn.utils.clip_grad_norm_(
-                            self.model.parameters(), self.config.grad_clipping)
-                        self.optimizer.step()
-                        self.schedule.step()
-                        self.optimizer.zero_grad()
-                        logger.info(
-                            'proxy model: {}: step: {}/{}, loss: {}'.format(datetime.now(), batch_idx + 1,
-                                                                            self.annotated_data.batch_num,
-                                                                            loss.item()))
-                        losses.append(loss.item())
-                progress.update(1)
+                        loss.backward()
+
+                        if (batch_idx + 1) % self.config.accumulate_step == 0:
+                            torch.nn.utils.clip_grad_norm_(
+                                self.model.parameters(), self.config.grad_clipping)
+                            self.optimizer.step()
+                            self.schedule.step()
+                            self.optimizer.zero_grad()
+                            logger.info(
+                                'proxy model: {}: step: {}/{}, loss: {}'.format(datetime.now(), batch_idx + 1,
+                                                                                self.annotated_data.batch_num,
+                                                                                loss.item()))
+                            losses.append(loss.item())
+                    progress.update(1)
+                    self.model.eval()
+                progress.close()
+                ############ SELECTION HAPPENS HERE #########
+                # print('{} | proxy model: start selecting unlabeled examples...'.format(datetime.now()))
+                self.select_unlabeled_examples()
+                print('-' * 50)
+                self.signal = PAUSE_MODEL
+            else:
                 self.model.eval()
-            progress.close()
-            ############ SELECTION HAPPENS HERE #########
-            # print('{} | proxy model: start selecting unlabeled examples...'.format(datetime.now()))
-            self.select_unlabeled_examples()
-            print('-' * 50)
-            # print('{} | proxy model: retraining and selection are done. Paused!'.format(datetime.now()))
-            self.signal = RUN_TARGET  # run the target model right after the proxy model finishses.
+                progress = tqdm.tqdm(total=len(self.unlabeled_data), ncols=75,
+                        desc='Proxy: Predicting spans')
+                for example in self.unlabeled_data:
+                    example['label'] = self.model.proxy_predicts(self.project_name, example['example_id'], example['text'], example['tokens'])
+                    progress.update(1)
+                progress.close()
 
+                with open(os.path.join(DATABASE_DIR, self.project_name, 'selected-unlabeled-data.json'), 'w') as f:
+                    for d in self.unlabeled_data:
+                        f.write(json.dumps(d) + '\n')
+                self.signal = PAUSE_MODEL
+                print('-' * 50)
 
 class TargetTrainer:
     def __init__(self, config, task, model, dataset):
@@ -214,6 +227,7 @@ class TargetTrainer:
         self.task = task
         self.model = model
         self.project_name = None
+        self.unlabeled_data = []
         if self.config.use_gpu:
             self.model.cuda()
 
@@ -298,10 +312,11 @@ class TargetTrainer:
 
             self.model.load_state_dict(init_weights)
 
-    def receive_signal(self, signal, project_name):
+    def receive_signal(self, signal, unlabeled_data, project_name):
         # if signal != PAUSE_MODEL:
         #     print('{} | target model received signal={}'.format(datetime.now(), signal))
         self.signal = signal
+        self.unlabeled_data = unlabeled_data
         if project_name:
             self.project_name = project_name
 
@@ -312,59 +327,75 @@ class TargetTrainer:
             if self.signal == STOP_CONTROLLER:
                 # print('{} | Stopping target model...'.format(datetime.now()))
                 break
-            elif self.signal != RUN_TARGET:
+            elif self.signal not in [RUN_TARGET, TARGET_PREDICTS]:
                 continue
 
-            self.load_init_weights()
+            if self.signal == RUN_TARGET:
+                self.load_init_weights()
 
-            progress = tqdm.tqdm(total=self.config.target_max_epoch, ncols=75,
-                                 desc='Retraining main model')
+                progress = tqdm.tqdm(total=self.config.target_max_epoch, ncols=75,
+                                     desc='Retraining main model')
 
-            for epoch in range(self.config.target_max_epoch):
-                torch.cuda.empty_cache()
-                if self.signal != RUN_TARGET:
-                    # print('{} | target model: breaking epoch'.format(datetime.now()))
-                    break
-                logger.info('target model: epoch {}'.format(epoch))
-                # training set
-                self.model.train()
-                self.optimizer.zero_grad()
-                losses = []
-                for batch_idx, batch in enumerate(DataLoader(
-                        self.annotated_data, batch_size=self.config.batch_size // self.config.accumulate_step,
-                        shuffle=True, collate_fn=self.annotated_data.collate_fn)):
+                for epoch in range(self.config.target_max_epoch):
+                    torch.cuda.empty_cache()
                     if self.signal != RUN_TARGET:
-                        progress.close()
-                        # print('{} | target model: breaking step'.format(datetime.now()))
+                        # print('{} | target model: breaking epoch'.format(datetime.now()))
                         break
-                    ######################################
-                    loss = self.model(batch)
-                    loss = loss * (1 / self.config.accumulate_step)
+                    logger.info('target model: epoch {}'.format(epoch))
+                    # training set
+                    self.model.train()
+                    self.optimizer.zero_grad()
+                    losses = []
+                    for batch_idx, batch in enumerate(DataLoader(
+                            self.annotated_data, batch_size=self.config.batch_size // self.config.accumulate_step,
+                            shuffle=True, collate_fn=self.annotated_data.collate_fn)):
+                        if self.signal != RUN_TARGET:
+                            progress.close()
+                            # print('{} | target model: breaking step'.format(datetime.now()))
+                            break
+                        ######################################
+                        loss = self.model(batch)
+                        loss = loss * (1 / self.config.accumulate_step)
 
-                    loss.backward()
+                        loss.backward()
 
-                    if (batch_idx + 1) % self.config.accumulate_step == 0:
-                        torch.nn.utils.clip_grad_norm_(
-                            self.model.parameters(), self.config.grad_clipping)
-                        self.optimizer.step()
-                        self.schedule.step()
-                        self.optimizer.zero_grad()
-                        logger.info(
-                            'target model: {}: step: {}/{}, loss: {}'.format(datetime.now(), batch_idx + 1,
-                                                                             self.annotated_data.batch_num,
-                                                                             loss.item()))
-                        losses.append(loss.item())
-                progress.update(1)
+                        if (batch_idx + 1) % self.config.accumulate_step == 0:
+                            torch.nn.utils.clip_grad_norm_(
+                                self.model.parameters(), self.config.grad_clipping)
+                            self.optimizer.step()
+                            self.schedule.step()
+                            self.optimizer.zero_grad()
+                            logger.info(
+                                'target model: {}: step: {}/{}, loss: {}'.format(datetime.now(), batch_idx + 1,
+                                                                                 self.annotated_data.batch_num,
+                                                                                 loss.item()))
+                            losses.append(loss.item())
+                    progress.update(1)
+                    self.model.eval()
+                progress.close()
+                precompute_distillation(
+                    self.annotated_data.data,
+                    self.model,
+                    self.config,
+                    self.project_name
+                )
+                print('Saving trained main model ...')
+                self.save_json_weights(self.output_model_param_fpath)
+                print('-' * 50)
+                # print('{} | target model: precomputing distillation signals is done!'.format(datetime.now()))
+                self.signal = PAUSE_MODEL
+            else:
                 self.model.eval()
-            progress.close()
-            precompute_distillation(
-                self.annotated_data.data,
-                self.model,
-                self.config,
-                self.project_name
-            )
-            print('Saving trained main model ...')
-            self.save_json_weights(self.output_model_param_fpath)
-            print('-' * 50)
-            # print('{} | target model: precomputing distillation signals is done!'.format(datetime.now()))
-            self.signal = PAUSE_MODEL
+                progress = tqdm.tqdm(total=len(self.unlabeled_data), ncols=75,
+                        desc='Target: Predicting spans')
+                for example in self.unlabeled_data:
+                    example['label'] = self.model.target_predicts(self.project_name, example['example_id'], example['text'],
+                                                                 example['tokens'])
+                    progress.update(1)
+                progress.close()
+
+                with open(os.path.join(DATABASE_DIR, self.project_name, 'selected-unlabeled-data.json'), 'w') as f:
+                    for d in self.unlabeled_data:
+                        f.write(json.dumps(d) + '\n')
+                self.signal = PAUSE_MODEL
+                print('-' * 50)

@@ -338,13 +338,14 @@ def subword_tokenize(tokens, tokenizer, max_sent_length):
 
 
 class ProxyDataset(Dataset):
-    def __init__(self, config, project_id, project_dir, project_annotations):
+    def __init__(self, config, project_id, project_dir, project_annotations, project_provided_data=None):
         self.config = config
 
         self.project_id = project_id
         self.project_dir = project_dir
         self.distil_file = os.path.join(project_dir, 'distillations.json')
         self.project_annotations = project_annotations
+        self.project_provided_data = project_provided_data
 
         unlabeled_sample = None
         with open(os.path.join(self.project_dir, 'unlabeled-data.json')) as f:
@@ -364,8 +365,9 @@ class ProxyDataset(Dataset):
         self.numberize()
         self.batch_num = len(self.data) // config.batch_size
 
-    def update_data(self, project_annotations):
+    def update_data(self, project_annotations, project_provided_data=None):
         self.project_annotations = project_annotations
+        self.project_provided_data = project_provided_data
         self.numberize()
         self.batch_num = len(self.data) // self.config.batch_size
 
@@ -465,6 +467,24 @@ class ProxyDataset(Dataset):
 
         torch.cuda.empty_cache()
 
+        if self.project_provided_data:
+            for provided_example_id in self.project_provided_data:
+                with open(os.path.join(self.trankit_dir, '{}.json'.format(provided_example_id))) as f:
+                    inst = json.load(f)
+
+                inst['label_idxs'] = [self.config.vocabs[self.project_id]['entity-label'].get(label, 0) for label in
+                                      inst['labels']]
+                inst['toklevel_spans'] = []  # not in use for now
+
+                if provided_example_id in id2tch_lbl_dist and provided_example_id in id2transitions:
+                    inst['tch_lbl_dist'] = id2tch_lbl_dist[provided_example_id]
+                    inst['transitions'] = id2transitions[provided_example_id]
+                else:
+                    inst['tch_lbl_dist'] = []
+                    inst['transitions'] = [0] * (len(inst['tokens']) + 1)
+
+                self.data.append(inst)
+
         self.output_labeled_data()
 
     def output_labeled_data(self):
@@ -550,20 +570,24 @@ class ProxyDataset(Dataset):
 
 
 class TargetDataset(Dataset):
-    def __init__(self, config, project_id, project_dir, project_annotations):
+    def __init__(self, config, project_id, project_dir, project_annotations, project_provided_data=None):
         self.config = config
 
         self.project_id = project_id
         self.project_dir = project_dir
         self.project_annotations = project_annotations
+        self.project_provided_data = project_provided_data
+
         self.trankit_dir = os.path.join(project_dir, 'trankit_features')
         ensure_dir(self.trankit_dir)
         self.data = []
         self.numberize()
         self.batch_num = len(self.data) // config.batch_size
 
-    def update_data(self, project_annotations):
+    def update_data(self, project_annotations, project_provided_data=None):
         self.project_annotations = project_annotations
+        self.project_provided_data = project_provided_data
+
         self.numberize()
         self.batch_num = len(self.data) // self.config.batch_size
 
@@ -591,7 +615,17 @@ class TargetDataset(Dataset):
                     self.data.append(inst)
 
         torch.cuda.empty_cache()
-        # print('Loaded {} annotated examples!'.format(len(self.data)))
+
+        if self.project_provided_data:
+            for provided_example_id in self.project_provided_data:
+                with open(os.path.join(self.trankit_dir, '{}.json'.format(provided_example_id))) as f:
+                    inst = json.load(f)
+
+                inst['label_idxs'] = [self.config.vocabs[self.project_id]['entity-label'].get(label, 0) for label in
+                                      inst['labels']]
+                inst['toklevel_spans'] = []  # not in use for now
+
+                self.data.append(inst)
 
     def collate_fn(self, batch):
         example_ids = [inst['example_id'] for inst in batch]

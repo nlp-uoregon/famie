@@ -8,7 +8,7 @@ import json
 import sys
 import shutil
 import traceback
-
+import tqdm
 from werkzeug.utils import secure_filename
 
 from famie.api.api_fns.project_creation.common import (ES_indexer,
@@ -62,10 +62,14 @@ class UploadedSupervisedFile(UploadedFile):
         print('Using {} tokenizer to preprocess unlabeled data ...'.format(lang))
 
         ####### tokenization and other trankit computations ########
+        progress = tqdm.tqdm(total=lid, ncols=75,
+                             desc='Preprocessing')
+
         numberized_data = []
         with open(os.path.join(project_full_path, 'unlabeled-data.raw.json')) as f:
             for line in f:
                 line = line.strip()
+                progress.update(1)
                 if line:
                     d = json.loads(line)
 
@@ -103,7 +107,7 @@ class UploadedSupervisedFile(UploadedFile):
                         'label_idxs': label_idxs
                     }
                     numberized_data.append(inst)
-
+        progress.close()
         with open(os.path.join(project_full_path, 'unlabeled-data.json'), 'w') as f:
             for nd in numberized_data:
                 f.write(json.dumps(nd) + '\n')

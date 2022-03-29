@@ -50,12 +50,16 @@ STOP_CONTROLLER = 'stop-controller'
 PAUSE_MODEL = 'pause-model'
 RUN_TARGET = 'run-target'
 RUN_PROXY = 'run-proxy'
+PROXY_PREDICTS = 'proxy-predicts'
+TARGET_PREDICTS = 'target-predicts'
 
 SIGNALS = {
     STOP_CONTROLLER: 'Stop the controller',
     PAUSE_MODEL: 'Pause model',
     RUN_TARGET: 'Run the target model',
-    RUN_PROXY: 'Run the proxy model'
+    RUN_PROXY: 'Run the proxy model',
+    PROXY_PREDICTS: 'Use proxy model to make predictions',
+    TARGET_PREDICTS: 'Use target model to make predictions'
 }
 
 EMBEDDING2DIM = {

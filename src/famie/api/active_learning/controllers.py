@@ -41,20 +41,24 @@ class Controller:
 
     def run_proxy_model(self, unlabeled_data, project_name):
         self.trainer['proxy'].receive_signal(RUN_PROXY, unlabeled_data, project_name)
-        self.trainer['target'].receive_signal(RUN_PROXY, project_name)
+        self.trainer['target'].receive_signal(RUN_PROXY, unlabeled_data, project_name)
 
     def run_target_model(self, project_name):
         self.trainer['proxy'].receive_signal(RUN_TARGET, [], project_name)
-        self.trainer['target'].receive_signal(RUN_TARGET, project_name)
+        self.trainer['target'].receive_signal(RUN_TARGET, [], project_name)
 
-    def pause_all_models(self):
-        self.trainer['proxy'].receive_signal(PAUSE_MODEL)
-        self.trainer['target'].receive_signal(PAUSE_MODEL)
+    def proxy_model_predicts(self, unlabeled_data, project_name):
+        self.trainer['proxy'].receive_signal(PROXY_PREDICTS, unlabeled_data, project_name)
+        self.trainer['target'].receive_signal(PROXY_PREDICTS, unlabeled_data, project_name)
+
+    def target_model_predicts(self, unlabeled_data, project_name):
+        self.trainer['proxy'].receive_signal(TARGET_PREDICTS, unlabeled_data, project_name)
+        self.trainer['target'].receive_signal(TARGET_PREDICTS, unlabeled_data, project_name)
 
     def stop_listening(self):
         if self.trainer:
             self.trainer['proxy'].receive_signal(STOP_CONTROLLER, [], None)
-            self.trainer['target'].receive_signal(STOP_CONTROLLER, None)
+            self.trainer['target'].receive_signal(STOP_CONTROLLER, [], None)
 
         self.model = None
         self.dataset = None
@@ -66,6 +70,7 @@ class Controller:
         project_dir = project_state['project_dir']
         project_id = project_state['project_id']
         project_annotations = project_state['annotations']
+        provided_labeled_data = project_state['provided_labeled_data']
 
         if not self.is_listening:
             print('-' * 50)
@@ -85,10 +90,10 @@ class Controller:
                     self.config.vocabs[project_id]['entity-label'])
 
             self.dataset = {
-                'proxy': ProxyDataset(self.config, project_id, project_dir, project_annotations),
-                'target': TargetDataset(self.config, project_id, project_dir, project_annotations)
+                'proxy': ProxyDataset(self.config, project_id, project_dir, project_annotations, provided_labeled_data),
+                'target': TargetDataset(self.config, project_id, project_dir, project_annotations,
+                                        provided_labeled_data)
             }
-
             self.dataset['target'].lang = self.dataset['proxy'].lang
 
             self.model = {
@@ -108,8 +113,8 @@ class Controller:
             thread.start_new_thread(self.trainer['target'].start_listening, ())
             print('-' * 50)
         else:
-            self.dataset['proxy'].update_data(project_annotations)
-            self.dataset['target'].update_data(project_annotations)
+            self.dataset['proxy'].update_data(project_annotations, provided_labeled_data)
+            self.dataset['target'].update_data(project_annotations, provided_labeled_data)
 
 
 if __name__ == '__main__':

@@ -9,7 +9,7 @@ from flask import (current_app,
                    request,
                    Blueprint)
 
-from famie.api.api_fns.project_settings.supervised import set_class_names
+from famie.api.api_fns.project_settings.supervised import set_class_names, parse_labeled_data
 from famie.api.blueprints.common import al_controllers, config
 from famie.api.active_learning.utils import *
 from famie.constants import PROJECT_TYPE_CLASSIFICATION, PROJECT_TYPE_NER
@@ -65,7 +65,7 @@ def start_iteration():
     # proxy model retraining & selection
     annotated, unlabeled = get_examples(project_name)
 
-    if len(annotated) > 0:
+    if len(annotated) > 0 or os.path.exists(os.path.join(DATABASE_DIR, project_name, 'provided-labeled-data.json')):
         project_info = get_project_info(project_name)
         project_type = project_info['type']
 
@@ -74,11 +74,19 @@ def start_iteration():
         if active_task != project_type or project_name != al_controllers['active_project']:
             al_controllers[active_task].stop_listening()
 
+        if os.path.exists(os.path.join(DATABASE_DIR, project_name, 'provided-labeled-data.json')):
+            with open(os.path.join(DATABASE_DIR, project_name, 'provided-labeled-data.json')) as f:
+                provided_labeled_data = [x['example_id'] for x in json.load(f)]
+        else:
+            provided_labeled_data = []
+
         al_controllers[project_type].listen(project_state={
             'project_dir': os.path.join(DATABASE_DIR, project_name),
             'project_id': project_name,
-            'annotations': annotated
+            'annotations': annotated,
+            'provided_labeled_data': provided_labeled_data
         })
+
         al_controllers['active_task'] = project_type
         al_controllers['active_project'] = project_name
 
@@ -89,6 +97,20 @@ def start_iteration():
                 break
         with open(os.path.join(DATABASE_DIR, project_name, 'selected-unlabeled-data.json')) as f:
             selected_unlabeled = [json.loads(line.strip()) for line in f if line.strip()]
+
+        if len(annotated) == 0:
+            al_controllers[project_type].proxy_model_predicts(selected_unlabeled, project_name)
+            while True:
+                time.sleep(LISTEN_TIME)
+                if al_controllers[project_type].trainer['proxy'].signal != PROXY_PREDICTS:
+                    break
+        else:
+            al_controllers[project_type].target_model_predicts(selected_unlabeled, project_name)
+            while True:
+                time.sleep(LISTEN_TIME)
+                if al_controllers[project_type].trainer['target'].signal != TARGET_PREDICTS:
+                    break
+
     else:
         for keyname in SUPPORTED_TASKS:
             al_controllers[keyname].stop_listening()
@@ -122,7 +144,7 @@ def get_docs():  # start the annotation and the training of the target model her
             for d in selected_unlabeled:
                 f.write(json.dumps(d) + '\n')
 
-    if os.path.exists(os.path.join(DATABASE_DIR, project_name, 'annotations.json')):
+    if os.path.exists(os.path.join(DATABASE_DIR, project_name, 'annotations.json')) or os.path.exists(os.path.join(DATABASE_DIR, project_name, 'provided-labeled-data.json')):
         project_info = get_project_info(project_name)
         project_type = project_info['type']
         if al_controllers[project_type].is_listening and al_controllers['active_project'] == project_name:
@@ -192,3 +214,87 @@ def export_rules():
         json_ckpt = f.read()
 
     return json_ckpt
+
+
+@supervised_bp.route('/api/download-unlabeled', methods=['POST'])
+def download_unlabeled():
+    project_name = request.form['project_name']
+    if not project_name:
+        raise Exception("Project name undefined")
+
+    data_fpath = os.path.join(DATABASE_DIR, project_name, 'selected-unlabeled-data.json')
+    if not os.path.exists(data_fpath):
+        print('{} does not exist!'.format(data_fpath))
+        return json.dumps({})
+
+    with open(data_fpath) as f:
+        selected_unlabeled = [json.loads(line.strip()) for line in f if line.strip()]
+        outputs = [{
+            'example_id': dpoint['example_id'],
+            'text': dpoint['text'],
+            'tokens': [t['text'] for t in dpoint['tokens']]
+        } for dpoint in selected_unlabeled]
+
+    return json.dumps({'project_name': project_name, 'data': outputs})
+
+
+@supervised_bp.route('/api/upload-labeled-data', methods=['POST'])
+def upload_labeled_data():
+    project_name = request.form['project_name']
+    if not project_name:
+        raise Exception("Project name undefined")
+
+    column_name = request.form['column_name']
+    if not column_name:
+        raise Exception("Column name undefined")
+
+    file = request.files['file']
+    if not file:
+        raise Exception("File is undefined")
+
+    provided_labeled_data = parse_labeled_data(file)
+    ensure_dir(os.path.join(DATABASE_DIR, project_name))
+    ensure_dir(os.path.join(DATABASE_DIR, project_name, 'trankit_features'))
+    with open(os.path.join(DATABASE_DIR, project_name, 'provided-labeled-data.json'), 'w') as f:
+        json.dump([{'example_id': d['example_id']} for d in provided_labeled_data], f, ensure_ascii=False)
+
+    progress = tqdm.tqdm(total=len(provided_labeled_data), ncols=75,
+                         desc='Preprocessing labeled data')
+
+    for d in provided_labeled_data:
+        progress.update(1)
+
+        tokens = d['tokens']
+        ######### subword tokenization #######
+        proxy_piece_idxs, proxy_attn_masks, proxy_token_lens = subword_tokenize(
+            tokens, config.proxy_tokenizer,
+            config.max_sent_length
+        )
+        target_piece_idxs, target_attn_masks, target_token_lens = subword_tokenize(
+            tokens, config.target_tokenizer,
+            config.max_sent_length
+        )
+        ######### read annotations ###########
+        labels = d['labels']
+
+        inst = {
+            'example_id': d['example_id'],
+            'text': 'original text is not provided',
+            'tokens': tokens,
+
+            'proxy_piece_idxs': proxy_piece_idxs,
+            'proxy_attention_mask': proxy_attn_masks,
+            'proxy_token_lens': proxy_token_lens,
+
+            'target_piece_idxs': target_piece_idxs,
+            'target_attention_mask': target_attn_masks,
+            'target_token_lens': target_token_lens,
+
+            'labels': labels
+        }
+        with open(os.path.join(DATABASE_DIR, project_name, 'trankit_features', '{}.json'.format(d['example_id'])), 'w') as f:
+            json.dump(inst, f, ensure_ascii=False)
+
+    progress.close()
+
+    return json.dumps({})

@@ -1,0 +1,122 @@
+import PropTypes from "prop-types";
+import React from "react";
+
+import { appendClassName, getUrlSanitizer } from "@elastic/react-search-ui-views/lib/view-helpers";
+import { isFieldValueWrapper } from "@elastic/react-search-ui-views/lib/types/FieldValueWrapper";
+
+
+const DISPLAYED_FIELDS = ["id", "text"]
+
+function getFieldType(result, field, type) {
+  if (result[field]) return result[field][type];
+}
+
+function getRaw(result, field) {
+  return getFieldType(result, field, "raw");
+}
+
+function getSnippet(result, field) {
+  return getFieldType(result, field, "snippet");
+}
+
+function htmlEscape(str) {
+  if (!str) return "";
+
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function getEscapedField(result, field) {
+  // Fallback to raw values here, because non-string fields
+  // will not have a snippet fallback. Raw values MUST be html escaped.
+  const safeField =
+    getSnippet(result, field) || htmlEscape(getRaw(result, field));
+  return Array.isArray(safeField) ? safeField.join(", ") : safeField;
+}
+
+function getField(result, field) {
+  // Fallback to raw values here, because non-string fields
+  // will not have a snippet fallback. Raw values MUST be html escaped.
+  const safeField =
+    getSnippet(result, field) || getRaw(result, field);
+  return Array.isArray(safeField) ? safeField.join(", ") : `${safeField}`;
+}
+
+function getEscapedFields(result) {
+  return Object.keys(result).reduce((acc, field) => {
+    // If we receive an arbitrary value from the response, we may not properly
+    // handle it, so we should filter out arbitrary values here.
+    //
+    // I.e.,
+    // Arbitrary value: "_metaField: '1939191'"
+    // vs.
+    // FieldValueWrapper: "_metaField: {raw: '1939191'}"
+    if (!isFieldValueWrapper(result[field])) return acc;
+    // return { ...acc, [field]: getEscapedField(result, field) };
+    return { ...acc, [field]: getField(result, field) };
+  }, {});
+}
+
+function Result({
+  className,
+  result,
+  onClickLink,
+  titleField,
+  urlField,
+  labelComponent,
+  getSearchTextComponent,
+  ...rest
+}) {
+  const fields = Object.fromEntries(DISPLAYED_FIELDS.map(k => [k, getEscapedFields(result)[k]]));
+  console.log("Inside Result", result, fields);
+  const title = getEscapedField(result, titleField);
+  const url = getUrlSanitizer(URL, location)(getRaw(result, urlField));
+
+  return (
+    <li className={appendClassName("sui-result", className)} {...rest}>
+      <div className="sui-result__header">
+        {title && !url && (
+          <span
+            className="sui-result__title"
+            dangerouslySetInnerHTML={{ __html: title }}
+          />
+        )}
+        {title && url && (
+          <a
+            className="sui-result__title sui-result__title-link"
+            dangerouslySetInnerHTML={{ __html: title }}
+            href={url}
+            onClick={onClickLink}
+            target="_blank"
+            rel="noopener noreferrer"
+          />
+        )}
+      </div>
+      <div className="sui-result__body">
+        <ul className="sui-result__details">
+          {Object.entries(fields).map(([fieldName, fieldValue]) => (
+            <li key={fieldName}>
+              <span className="sui-result__key">{fieldName}</span>{" "} 
+              {getSearchTextComponent(fieldValue)}
+            </li>
+          ))}
+        </ul>
+      </div>
+      {labelComponent}
+    </li>
+  );
+}
+
+Result.propTypes = {
+  result: PropTypes.object.isRequired,
+  onClickLink: PropTypes.func.isRequired,
+  className: PropTypes.string,
+  titleField: PropTypes.string,
+  urlField: PropTypes.string
+};
+
+export default Result;

@@ -41,8 +41,8 @@ class Config:
         self.weight_decay = 1e-3
 
         self.batch_size = 16
-        self.proxy_max_epoch = 20
-        self.target_max_epoch = 40
+        self.proxy_max_epoch = 15
+        self.target_max_epoch = 30
         self.seed = 3456
         self.accumulate_step = 1
         self.grad_clipping = 4.5
@@ -51,7 +51,7 @@ class Config:
         self.selection = passed_args['selection']
         assert self.selection in ['random', 'bertkm', 'badge', 'mnlp']
 
-        self.num_examples_per_iter = 100
+        self.num_examples_per_iter = 50
 
         self.vocabs = {}
 

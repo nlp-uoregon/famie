@@ -366,7 +366,8 @@ class SeqLabel(nn.Module):
             texts=[raw_text],
             tokens=[tokens],
             piece_idxs=torch.cuda.LongTensor([piece_idxs]) if self.config.use_gpu else torch.LongTensor([piece_idxs]),
-            attention_masks=torch.cuda.LongTensor([attn_masks]) if self.config.use_gpu else torch.LongTensor([attn_masks]),
+            attention_masks=torch.cuda.LongTensor([attn_masks]) if self.config.use_gpu else torch.LongTensor(
+                [attn_masks]),
             token_lens=[token_lens],
             label_idxs=[0] * len(tokens),
             token_nums=torch.cuda.LongTensor([len(tokens)]) if self.config.use_gpu else torch.LongTensor([len(tokens)]),
@@ -386,7 +387,91 @@ class SeqLabel(nn.Module):
             pred = [self.label_itos[lid] for lid in label_pred_ids[bid][:batch.token_nums[bid]]]
             label_preds.append(pred)
 
-        return label_preds[0]
+        return list(zip([t['text'] for t in tokens], label_preds[0]))
+
+    def proxy_predicts(self, project_id, example_id, raw_text, tokens):
+        piece_idxs, attn_masks, token_lens = subword_tokenize(
+            tokens,
+            self.config.proxy_tokenizer,
+            self.config.max_sent_length
+        )
+        batch = TargetBatch(
+            example_ids=[example_id],
+            texts=[raw_text],
+            tokens=[tokens],
+            piece_idxs=torch.cuda.LongTensor([piece_idxs]) if self.config.use_gpu else torch.LongTensor([piece_idxs]),
+            attention_masks=torch.cuda.LongTensor([attn_masks]) if self.config.use_gpu else torch.LongTensor(
+                [attn_masks]),
+            token_lens=[token_lens],
+            label_idxs=[0] * len(tokens),
+            token_nums=torch.cuda.LongTensor([len(tokens)]) if self.config.use_gpu else torch.LongTensor([len(tokens)]),
+            distill_mask=[0]
+        )
+
+        word_reprs, _ = self.embedding.get_tagger_inputs(batch)
+        batch_size, _, _ = word_reprs.size()
+
+        h_t = self.penultimate_ffn(word_reprs)
+        label_scores = self.label_ffn(h_t)
+        label_scores = self.crf.pad_logits(label_scores)
+        _, label_pred_ids = self.crf.viterbi_decode(label_scores, batch.token_nums)
+        spans = tag_paths_to_spans(label_pred_ids, batch.token_nums, self.config.vocabs[project_id]['entity-label'])[0]
+
+        outputs = []
+        for ssid, span in enumerate(spans):
+            start, end, label = span
+            start_char = tokens[start]['span'][0]
+            end_char = tokens[end - 1]['span'][1]
+            outputs.append(
+                {'start': start_char, 'end': end_char,
+                 'entityId': self.config.vocabs[project_id]['entity-type'][label],
+                 'id': "{}-ss{}".format(example_id, ssid),
+                 'text': raw_text[start_char: end_char]
+                 }
+            )
+        return outputs
+
+    def target_predicts(self, project_id, example_id, raw_text, tokens):
+        piece_idxs, attn_masks, token_lens = subword_tokenize(
+            tokens,
+            self.config.target_tokenizer,
+            self.config.max_sent_length
+        )
+        batch = TargetBatch(
+            example_ids=[example_id],
+            texts=[raw_text],
+            tokens=[tokens],
+            piece_idxs=torch.cuda.LongTensor([piece_idxs]) if self.config.use_gpu else torch.LongTensor([piece_idxs]),
+            attention_masks=torch.cuda.LongTensor([attn_masks]) if self.config.use_gpu else torch.LongTensor(
+                [attn_masks]),
+            token_lens=[token_lens],
+            label_idxs=[0] * len(tokens),
+            token_nums=torch.cuda.LongTensor([len(tokens)]) if self.config.use_gpu else torch.LongTensor([len(tokens)]),
+            distill_mask=[0]
+        )
+
+        word_reprs, _ = self.embedding.get_tagger_inputs(batch)
+        batch_size, _, _ = word_reprs.size()
+
+        h_t = self.penultimate_ffn(word_reprs)
+        label_scores = self.label_ffn(h_t)
+        label_scores = self.crf.pad_logits(label_scores)
+        _, label_pred_ids = self.crf.viterbi_decode(label_scores, batch.token_nums)
+        spans = tag_paths_to_spans(label_pred_ids, batch.token_nums, self.config.vocabs[project_id]['entity-label'])[0]
+
+        outputs = []
+        for ssid, span in enumerate(spans):
+            start, end, label = span
+            start_char = tokens[start]['span'][0]
+            end_char = tokens[end - 1]['span'][1]
+            outputs.append(
+                {'start': start_char, 'end': end_char,
+                 'entityId': self.config.vocabs[project_id]['entity-type'][label],
+                 'id': "{}-ss{}".format(example_id, ssid),
+                 'text': raw_text[start_char: end_char]
+                 }
+            )
+        return outputs
 
     def compute_distill_loss(self, std_lbl_scores, batch):
         '''
@@ -413,7 +498,7 @@ class SeqLabel(nn.Module):
             -1)  # [batch size, 1 + seq len]
 
         transition_loss = torch.sum((tch_transitions - std_transitions) ** 2) / (
-                    torch.sum(tch_transitions != 0) + 1e-12)
+                torch.sum(tch_transitions != 0) + 1e-12)
 
         return kl_loss * 0.1 + transition_loss
 

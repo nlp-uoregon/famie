@@ -1,0 +1,53 @@
+{
+  "name": "labelling-app",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "scripts": {
+    "build": "webpack --config ./webpack.prod.js && cp public/bundle.js ../src/famie/api/static/",
+    "dev-server": "webpack serve --config ./webpack.dev.js"
+  },
+  "dependencies": {
+    "@babel/core": "7.16.0",
+    "@babel/preset-env": "7.16.0",
+    "@babel/preset-react": "7.16.0",
+    "@elastic/react-search-ui": "1.7.0",
+    "@elastic/react-search-ui-views": "1.7.0",
+    "@material-ui/core": "4.11.2",
+    "@material-ui/icons": "4.9.1",
+    "@material-ui/lab": "4.0.0-alpha.57",
+    "babel-cli": "6.24.1",
+    "babel-loader": "8.2.3",
+    "babel-plugin-lodash": "3.3.4",
+    "babel-plugin-recharts": "1.2.1",
+    "babel-plugin-transform-class-properties": "6.24.1",
+    "css-loader": "6.5.1",
+    "emoji-regex": "^6.5.1",
+    "jquery": "^3.4.1",
+    "lodash": "4.17.20",
+    "node-sass": "6.0.1",
+    "normalize.css": "7.0.0",
+    "papaparse": "5.3.1",
+    "query-string": "6.12.0",
+    "react": "16.8.0",
+    "react-dom": "16.8.0",
+    "react-router-dom": "5.1.2",
+    "react-spinners": "^0.8.1",
+    "react-uuid": "1.0.2",
+    "recharts": "1.8.5",
+    "recompose": "0.30.0",
+    "sass-loader": "12.3.0",
+    "style-loader": "3.3.1",
+    "webpack": "5.62.1",
+    "webpack-dev-server": "4.4.0",
+    "webpack-merge": "5.8.0",
+    "yargs": "^17.4.0"
+  },
+  "devDependencies": {
+    "webpack-cli": "^4.9.1"
+  },
+  "engines": {
+    "node": "16.13.0",
+    "npm": "8.1.0"
+  }
+}
