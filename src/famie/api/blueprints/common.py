@@ -5,6 +5,7 @@ Mofied from:https://github.com/dataqa/dataqa/blob/master/src/dataqa/api/blueprin
 from datetime import datetime
 from distutils.util import strtobool
 import json
+import shutil
 
 from flask import (current_app,
                    render_template,
@@ -110,7 +111,11 @@ def upload():
 def delete_project(project_name):
     if not project_name:
         raise Exception("Project name undefined")
-
+    upload_folder = os.path.join(DATABASE_DIR, project_name)
+    shutil.rmtree(upload_folder, ignore_errors=True)
+    active_task = al_controllers['active_task']
+    if project_name == al_controllers['active_project']:
+        al_controllers[active_task].stop_listening()
     return "success"
 
 

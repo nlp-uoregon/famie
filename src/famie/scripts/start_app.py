@@ -8,6 +8,7 @@ import webbrowser
 from famie.config.config_reader import read_config
 from famie.api.active_learning.constants import WORKING_DIR
 from pathlib import Path
+from flask_cors import CORS
 
 
 def main(args):
@@ -36,6 +37,8 @@ def main(args):
 
     print('FAMIE`s Web Interface is available at: http://127.0.0.1:{}/'.format(args.port))
     print('-' * 50)
+
+    CORS(application)
 
     application.run(debug=False,
                     port=args.port,
