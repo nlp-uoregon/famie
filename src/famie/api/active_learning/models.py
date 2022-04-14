@@ -387,7 +387,7 @@ class SeqLabel(nn.Module):
             pred = [self.label_itos[lid] for lid in label_pred_ids[bid][:batch.token_nums[bid]]]
             label_preds.append(pred)
 
-        return list(zip([t['text'] for t in tokens], label_preds[0]))
+        return list(zip([t for t in tokens], label_preds[0]))
 
     def proxy_predicts(self, project_id, example_id, raw_text, tokens):
         piece_idxs, attn_masks, token_lens = subword_tokenize(
