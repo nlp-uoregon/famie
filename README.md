@@ -24,13 +24,11 @@ FAMIE is a comprehensive  and efficient **active learning** (AL) toolkit for **m
 
 If you use FAMIE in your research or products, please cite our following paper:
 ```bibtex
-@misc{vannguyen2022famie,
+@inproceedings{vannguyen2022famie,
       title={FAMIE: A Fast Active Learning Framework for Multilingual Information Extraction}, 
       author={Nguyen, Minh Van and Ngo, Nghia Trung and Min, Bonan and Nguyen, Thien Huu},
-      year={2022},
-      eprint={2202.08316},
-      archivePrefix={arXiv},
-      primaryClass={cs.CL}
+      booktitle={Proceedings of the 2022 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies: Demonstrations},
+      year={2022}
 }
 ```
 
