@@ -29,7 +29,7 @@ extra_files.extend(["api/static/bundle.js",
 
 setuptools.setup(
     name="famie",
-    version="0.2.1",
+    version="0.3.0",
     author="NLP Group at the University of Oregon",
     author_email="thien@cs.uoregon.edu",
     description="FAMIE: A Fast Active Learning Framework for Multilingual Information Extraction",
