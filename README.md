@@ -55,7 +55,7 @@ pip install -e .
 This would first clone our github repo and install FAMIE.
 
 ### Usage
-FAMIE currently supports Named Entity Recognition and Event Detection for over [100 languages](https://trankit.readthedocs.io/en/latest/pkgnames.html#trainable-languages). Using FAMIE includes three following steps:
+FAMIE currently supports Named Entity Recognition, Event Detection, and Event Argument Extraction for over [100 languages](https://trankit.readthedocs.io/en/latest/pkgnames.html#trainable-languages). Using FAMIE includes three following steps:
 - Start an annotation session.
 - Annotate data for a target task.
 - Access the labeled data and a ready-to-use model returned by FAMIE.
