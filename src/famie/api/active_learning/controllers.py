@@ -1,5 +1,5 @@
 # define controllers for active learning modules
-from .models import SeqLabel
+from .models import SeqLabel, ConditionalSeqLabel
 from .trainers import *
 from .utils import *
 
@@ -48,12 +48,16 @@ class Controller:
         self.trainer['target'].receive_signal(RUN_TARGET, [], project_name)
 
     def proxy_model_predicts(self, unlabeled_data, project_name):
-        self.trainer['proxy'].receive_signal(PROXY_PREDICTS, unlabeled_data, project_name)
-        self.trainer['target'].receive_signal(PROXY_PREDICTS, unlabeled_data, project_name)
+        if self.trainer['proxy'].is_trained:
+            self.trainer['proxy'].receive_signal(PROXY_PREDICTS, unlabeled_data, project_name)
+        if self.trainer['target'].is_trained:
+            self.trainer['target'].receive_signal(PROXY_PREDICTS, unlabeled_data, project_name)
 
     def target_model_predicts(self, unlabeled_data, project_name):
-        self.trainer['proxy'].receive_signal(TARGET_PREDICTS, unlabeled_data, project_name)
-        self.trainer['target'].receive_signal(TARGET_PREDICTS, unlabeled_data, project_name)
+        if self.trainer['proxy'].is_trained:
+            self.trainer['proxy'].receive_signal(TARGET_PREDICTS, unlabeled_data, project_name)
+        if self.trainer['target'].is_trained:
+            self.trainer['target'].receive_signal(TARGET_PREDICTS, unlabeled_data, project_name)
 
     def stop_listening(self):
         if self.trainer:
@@ -69,6 +73,7 @@ class Controller:
     def listen(self, project_state):
         project_dir = project_state['project_dir']
         project_id = project_state['project_id']
+        project_task_type = project_state['project_task_type']
         project_annotations = project_state['annotations']
         provided_labeled_data = project_state['provided_labeled_data']
 
@@ -96,18 +101,26 @@ class Controller:
             }
             self.dataset['target'].lang = self.dataset['proxy'].lang
 
-            self.model = {
-                'proxy': SeqLabel(self.config, project_id, model_name='proxy'),
-                'target': SeqLabel(self.config, project_id, model_name='target')
-            }
+            if project_task_type == 'conditional':
+                print('initializating ConditionalSeqLabel models...')
+                self.model = {
+                    'proxy': ConditionalSeqLabel(self.config, project_id, model_name='proxy'),
+                    'target': ConditionalSeqLabel(self.config, project_id, model_name='target')
+                }
+            else:
+                print('initializing SeqLabel models...')
+                assert project_task_type == 'unconditional'
+                self.model = {
+                    'proxy': SeqLabel(self.config, project_id, model_name='proxy'),
+                    'target': SeqLabel(self.config, project_id, model_name='target')
+                }
 
             self.trainer = {
-                'proxy': ProxyTrainer(self.config, self.task, self.model['proxy'], self.dataset['proxy']),
-                'target': TargetTrainer(self.config, self.task, self.model['target'], self.dataset['target'])
+                'proxy': ProxyTrainer(self.config, self.task, self.model['proxy'], self.dataset['proxy'],
+                                      project_task_type),
+                'target': TargetTrainer(self.config, self.task, self.model['target'], self.dataset['target'],
+                                        project_task_type)
             }
-
-            self.trainer['proxy'].save_weights(save_fpath=self.trainer['proxy'].init_model_param_fpath)
-            self.trainer['target'].save_weights(save_fpath=self.trainer['target'].init_model_param_fpath)
 
             thread.start_new_thread(self.trainer['proxy'].start_listening, ())
             thread.start_new_thread(self.trainer['target'].start_listening, ())

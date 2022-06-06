@@ -29,6 +29,7 @@ WORKING_DIR = os.path.dirname(os.path.realpath(__file__))
 DATABASE_DIR = os.path.join(WORKING_DIR, 'database')
 PROJECT_INFO_FPATH = os.path.join(DATABASE_DIR, 'project2info.json')
 LOG_DIR = os.path.join(WORKING_DIR, 'logs')
+PRETRAIN_DIR = os.path.join(WORKING_DIR, 'pretrain-dir')
 
 OUTPUT_DIR = os.path.join(WORKING_DIR, 'famie-output')
 
@@ -37,6 +38,7 @@ TASK_NAME_FPATH = os.path.join(SIGNAL_DIR['base'], 'task_name.txt')
 
 ensure_dir(SIGNAL_DIR['base'])
 ensure_dir(DATABASE_DIR)
+ensure_dir(PRETRAIN_DIR)
 
 for task in SUPPORTED_TASKS:
     SIGNAL_DIR[task] = os.path.join(SIGNAL_DIR['base'], task)
@@ -69,6 +71,11 @@ EMBEDDING2DIM = {
     'nreimers/mMiniLMv2-L6-H384-distilled-from-XLMR-Large': 384
 }
 
+PROXY_PRETRAINED_TRIGGER_MODEL_PATH = os.path.join(PRETRAIN_DIR, 'proxy.pretrained-trigger.ckpt')
+PROXY_PRETRAINED_ARGUMENT_MODEL_PATH = os.path.join(PRETRAIN_DIR, 'proxy.pretrained-argument.ckpt')
+TARGET_PRETRAINED_TRIGGER_MODEL_PATH = os.path.join(PRETRAIN_DIR, 'target.pretrained-trigger.ckpt')
+TARGET_PRETRAINED_ARGUMENT_MODEL_PATH = os.path.join(PRETRAIN_DIR, 'target.pretrained-argument.ckpt')
+
 if not os.path.exists(PROJECT_INFO_FPATH):
     with open(PROJECT_INFO_FPATH, 'w') as f:
         json.dump({}, f)
@@ -76,22 +83,22 @@ if not os.path.exists(PROJECT_INFO_FPATH):
 SPAN_KEYS = ["id", "start", "end", "text", "entity_id"]
 
 PROXY_BATCH_FIELDS = [
-    'example_ids', 'texts', 'tokens', 'piece_idxs', 'attention_masks', 'token_lens',
+    'example_ids', 'texts', 'tokens', 'anchors', 'piece_idxs', 'attention_masks', 'token_lens',
     'label_idxs', 'token_nums', 'distill_mask',
     'tch_lbl_dist', 'transitions'
 ]
 
 TARGET_BATCH_FIELDS = [
-    'example_ids', 'texts', 'tokens', 'piece_idxs', 'attention_masks', 'token_lens',
+    'example_ids', 'texts', 'tokens', 'anchors', 'piece_idxs', 'attention_masks', 'token_lens',
     'label_idxs', 'token_nums', 'distill_mask'
 ]
 
 AL_BATCH_FIELDS = [
-    'example_ids', 'tokens', 'piece_idxs', 'attention_masks', 'token_lens',
+    'example_ids', 'tokens', 'anchors', 'piece_idxs', 'attention_masks', 'token_lens',
     'labels', 'label_idxs', 'token_nums'
 ]
 
-CKPT_KEYS = {'project_name', 'lang', 'embedding_name', 'hidden_num', 'vocabs', 'weights'}
+CKPT_KEYS = {'project_name', 'project_task_type', 'lang', 'embedding_name', 'hidden_num', 'vocabs', 'weights'}
 
 
 def convert_ckpt_to_json(ckpt_fpath):

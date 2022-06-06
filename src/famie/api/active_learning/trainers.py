@@ -19,18 +19,29 @@ logger = logging.getLogger(__name__)
 
 
 class ProxyTrainer:
-    def __init__(self, config, task, model, dataset):
+    def __init__(self, config, task, model, dataset, project_task_type):
         self.config = config
         self.task = task
+        self.project_task_type = project_task_type
         self.model = model
         self.project_name = None
         if self.config.use_gpu:
             self.model.cuda()
 
         self.annotated_data = dataset
+        self.is_trained = False
 
         ensure_dir(os.path.join(DATABASE_DIR, dataset.project_id))
-        self.init_model_param_fpath = os.path.join(DATABASE_DIR, dataset.project_id, 'proxy_init_weights.ckpt')
+        if project_task_type == 'unconditional':
+            self.init_model_param_fpath = PROXY_PRETRAINED_TRIGGER_MODEL_PATH
+        else:
+            self.init_model_param_fpath = PROXY_PRETRAINED_ARGUMENT_MODEL_PATH
+
+        download('proxy', project_task_type, self.init_model_param_fpath)
+        self.init_model = torch.load(self.init_model_param_fpath)
+
+        self.annotated_data.numberize()
+        self.annotated_data.batch_num = len(self.annotated_data.data) // config.batch_size
 
         self.unlabeled_data = []
         self.signal = PAUSE_MODEL
@@ -67,13 +78,16 @@ class ProxyTrainer:
             }
         ]
         self.optimizer = AdamW(params=param_groups)
+        self.scheduler = get_linear_schedule_with_warmup(self.optimizer,
+                                                         num_warmup_steps=self.annotated_data.batch_num * 5,
+                                                         num_training_steps=self.annotated_data.batch_num * self.config.proxy_max_epoch)
 
-        self.schedule = get_linear_schedule_with_warmup(self.optimizer,
-                                                        num_warmup_steps=self.annotated_data.batch_num * 5,
-                                                        num_training_steps=self.annotated_data.batch_num * self.config.proxy_max_epoch)
+        self.optimizer_state_dict = self.optimizer.state_dict()
+        self.scheduler_state_dict = self.scheduler.state_dict()
 
     def save_weights(self, save_fpath):
         state_dict = {
+            'project_task_type': self.project_task_type,
             'embedding_name': self.config.proxy_embedding_name,
             'hidden_num': self.config.hidden_num,
             'vocabs': self.config.vocabs[self.annotated_data.project_id],
@@ -86,11 +100,15 @@ class ProxyTrainer:
         torch.save(state_dict, save_fpath)
 
     def load_init_weights(self):
+        self.optimizer.load_state_dict(self.optimizer_state_dict)
+        self.scheduler.load_state_dict(self.scheduler_state_dict)
+
         self.model.eval()
         if os.path.exists(self.init_model_param_fpath):
-            init_weights = torch.load(self.init_model_param_fpath)['weights']
+            init_weights = self.init_model['weights']
+
             for name, param in self.model.state_dict().items():
-                if name not in init_weights:
+                if not (name.startswith('embedding.xlmr') and 'adapters' in name):
                     init_weights[name] = param
 
             self.model.load_state_dict(init_weights)
@@ -141,7 +159,7 @@ class ProxyTrainer:
 
         with open(os.path.join(DATABASE_DIR, self.project_name, 'selected-unlabeled-data.json'), 'w') as f:
             for d in selected_examples:
-                f.write(json.dumps(d) + '\n')
+                f.write(json.dumps(d, ensure_ascii=False) + '\n')
 
         # print('*' * 20)
         # print('{} | Selected {} examples.'.format(datetime.now(), len(selected_examples)))
@@ -191,7 +209,7 @@ class ProxyTrainer:
                             torch.nn.utils.clip_grad_norm_(
                                 self.model.parameters(), self.config.grad_clipping)
                             self.optimizer.step()
-                            self.schedule.step()
+                            self.scheduler.step()
                             self.optimizer.zero_grad()
                             logger.info(
                                 'proxy model: {}: step: {}/{}, loss: {}'.format(datetime.now(), batch_idx + 1,
@@ -206,25 +224,30 @@ class ProxyTrainer:
                 self.select_unlabeled_examples()
                 print('-' * 50)
                 self.signal = PAUSE_MODEL
+                self.is_trained = True
             else:
                 self.model.eval()
                 progress = tqdm.tqdm(total=len(self.unlabeled_data), ncols=75,
-                        desc='Proxy: Predicting spans')
+                                     desc='Proxy: Predicting spans')
                 for example in self.unlabeled_data:
-                    example['label'] = self.model.proxy_predicts(self.project_name, example['example_id'], example['text'], example['tokens'])
+                    example['label'] = self.model.proxy_predicts(self.project_name, example['example_id'],
+                                                                 example['text'], example['tokens'],
+                                                                 example['anchor'] if 'anchor' in example else -1)
                     progress.update(1)
                 progress.close()
 
                 with open(os.path.join(DATABASE_DIR, self.project_name, 'selected-unlabeled-data.json'), 'w') as f:
                     for d in self.unlabeled_data:
-                        f.write(json.dumps(d) + '\n')
+                        f.write(json.dumps(d, ensure_ascii=False) + '\n')
                 self.signal = PAUSE_MODEL
                 print('-' * 50)
 
+
 class TargetTrainer:
-    def __init__(self, config, task, model, dataset):
+    def __init__(self, config, task, model, dataset, project_task_type):
         self.config = config
         self.task = task
+        self.project_task_type = project_task_type
         self.model = model
         self.project_name = None
         self.unlabeled_data = []
@@ -232,12 +255,21 @@ class TargetTrainer:
             self.model.cuda()
 
         self.annotated_data = dataset
+        self.is_trained = False
 
         ensure_dir(os.path.join(DATABASE_DIR, dataset.project_id))
         ensure_dir(os.path.join(OUTPUT_DIR, dataset.project_id))
 
-        self.init_model_param_fpath = os.path.join(DATABASE_DIR, dataset.project_id,
-                                                   'target_init_weights.ckpt')  # torch weights
+        if project_task_type == 'unconditional':
+            self.init_model_param_fpath = TARGET_PRETRAINED_TRIGGER_MODEL_PATH
+        else:
+            self.init_model_param_fpath = TARGET_PRETRAINED_ARGUMENT_MODEL_PATH
+
+        download('proxy', project_task_type, self.init_model_param_fpath)
+        self.init_model = torch.load(self.init_model_param_fpath)
+
+        self.annotated_data.numberize()
+        self.annotated_data.batch_num = len(self.annotated_data.data) // config.batch_size
 
         self.output_model_param_fpath = os.path.join(OUTPUT_DIR, dataset.project_id,
                                                      'target_output_weights.ckpt')  # json weights
@@ -277,13 +309,17 @@ class TargetTrainer:
         ]
         self.optimizer = AdamW(params=param_groups)
 
-        self.schedule = get_linear_schedule_with_warmup(self.optimizer,
-                                                        num_warmup_steps=self.annotated_data.batch_num * 5,
-                                                        num_training_steps=self.annotated_data.batch_num * self.config.target_max_epoch)
+        self.scheduler = get_linear_schedule_with_warmup(self.optimizer,
+                                                         num_warmup_steps=self.annotated_data.batch_num * 5,
+                                                         num_training_steps=self.annotated_data.batch_num * self.config.target_max_epoch)
+
+        self.optimizer_state_dict = self.optimizer.state_dict()
+        self.scheduler_state_dict = self.scheduler.state_dict()
 
     def save_weights(self, save_fpath):
         init_state_dict = {
             'project_name': self.annotated_data.project_id,
+            'project_task_type': self.project_task_type,
             'lang': self.annotated_data.lang,
             'embedding_name': self.config.target_embedding_name,
             'hidden_num': self.config.hidden_num,
@@ -300,14 +336,18 @@ class TargetTrainer:
         self.save_weights(save_fpath)
         json_ckpt = convert_ckpt_to_json(save_fpath)
         with open(save_fpath, 'w') as f:
-            json.dump(json_ckpt, f)
+            json.dump(json_ckpt, f, ensure_ascii=False)
 
     def load_init_weights(self):
+        self.optimizer.load_state_dict(self.optimizer_state_dict)
+        self.scheduler.load_state_dict(self.scheduler_state_dict)
+
         self.model.eval()
         if os.path.exists(self.init_model_param_fpath):
-            init_weights = torch.load(self.init_model_param_fpath)['weights']
+            init_weights = self.init_model['weights']
+
             for name, param in self.model.state_dict().items():
-                if name not in init_weights:
+                if not (name.startswith('embedding.xlmr') and 'adapters' in name):
                     init_weights[name] = param
 
             self.model.load_state_dict(init_weights)
@@ -363,7 +403,7 @@ class TargetTrainer:
                             torch.nn.utils.clip_grad_norm_(
                                 self.model.parameters(), self.config.grad_clipping)
                             self.optimizer.step()
-                            self.schedule.step()
+                            self.scheduler.step()
                             self.optimizer.zero_grad()
                             logger.info(
                                 'target model: {}: step: {}/{}, loss: {}'.format(datetime.now(), batch_idx + 1,
@@ -372,6 +412,7 @@ class TargetTrainer:
                             losses.append(loss.item())
                     progress.update(1)
                     self.model.eval()
+
                 progress.close()
                 precompute_distillation(
                     self.annotated_data.data,
@@ -382,20 +423,24 @@ class TargetTrainer:
                 print('Saving trained main model ...')
                 self.save_json_weights(self.output_model_param_fpath)
                 print('-' * 50)
+
                 # print('{} | target model: precomputing distillation signals is done!'.format(datetime.now()))
                 self.signal = PAUSE_MODEL
+                self.is_trained = True
             else:
                 self.model.eval()
                 progress = tqdm.tqdm(total=len(self.unlabeled_data), ncols=75,
-                        desc='Target: Predicting spans')
+                                     desc='Target: Predicting spans')
                 for example in self.unlabeled_data:
-                    example['label'] = self.model.target_predicts(self.project_name, example['example_id'], example['text'],
-                                                                 example['tokens'])
+                    example['label'] = self.model.target_predicts(self.project_name, example['example_id'],
+                                                                  example['text'],
+                                                                  example['tokens'],
+                                                                  example['anchor'] if 'anchor' in example else -1)
                     progress.update(1)
                 progress.close()
 
                 with open(os.path.join(DATABASE_DIR, self.project_name, 'selected-unlabeled-data.json'), 'w') as f:
                     for d in self.unlabeled_data:
-                        f.write(json.dumps(d) + '\n')
+                        f.write(json.dumps(d, ensure_ascii=False) + '\n')
                 self.signal = PAUSE_MODEL
                 print('-' * 50)

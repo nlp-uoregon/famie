@@ -6,6 +6,8 @@ from famie.api.active_learning.constants import *
 class Project:
     def __init__(self, project):
         self.project_name = project['name']
+        self.project_task_type = project['project_task_type']
+        assert self.project_task_type in ['unconditional', 'conditional']
         self.type_set = [{'id': l['id'], 'type': l['name']} for l in project['classes']]
 
     def __str__(self):
@@ -22,7 +24,7 @@ class Project:
             return None
         else:
             with open(labeled_fpath) as f:
-                data = json.load(f)
+                data = [json.loads(line.strip()) for line in f if line.strip()]
             print('Done!')
             return data
 
@@ -36,10 +38,12 @@ class Project:
             return None
         else:
             with open(labeled_fpath) as f:
-                data = json.load(f)
+                data = [json.loads(line.strip()) for line in f if line.strip()]
 
             with open(data_file, 'w') as f:
-                json.dump(data, f, ensure_ascii=False)
+                for d in data:
+                    f.write(json.dumps(d, ensure_ascii=False) + '\n')
+
             print('Done!')
 
     def export_trained_model(self, model_file):
@@ -58,7 +62,8 @@ class Project:
     def get_trained_model(self):
         print('Loading trained model ...')
         print('-' * 50)
-        from famie.api.active_learning.models import SeqLabel, XLMRobertaTokenizer, OUTPUT_DIR, WORKING_DIR
+        from famie.api.active_learning.models import SeqLabel, XLMRobertaTokenizer, OUTPUT_DIR, WORKING_DIR, \
+            ConditionalSeqLabel
 
         saved_fpath = os.path.join(OUTPUT_DIR, self.project_name, 'target_output_weights.ckpt')
         if not os.path.exists(saved_fpath):
@@ -69,7 +74,7 @@ class Project:
         import trankit
 
         torch.cuda.empty_cache()
-        
+
         saved_ckpt = convert_json_to_ckpt(saved_fpath, use_gpu=torch.cuda.is_available())
 
         config = namedtuple('Config', field_names=[
@@ -102,12 +107,19 @@ class Project:
                                                                       cache_dir=os.path.join(config.cache_dir,
                                                                                              config.target_embedding_name),
                                                                       do_lower_case=False)
+        if self.project_task_type == 'unconditional':
+            trained_model = SeqLabel(
+                config=config,
+                project_id=self.project_name,
+                model_name='target'
+            )
+        else:
+            trained_model = ConditionalSeqLabel(
+                config=config,
+                project_id=self.project_name,
+                model_name='target'
+            )
 
-        trained_model = SeqLabel(
-            config=config,
-            project_id=self.project_name,
-            model_name='target'
-        )
         if config.use_gpu:
             trained_model.cuda()
             trained_model.half()
@@ -146,7 +158,8 @@ def load_model_from_file(model_file):
         print('{} does not exist!'.format(model_file))
         return None
 
-    from famie.api.active_learning.models import SeqLabel, XLMRobertaTokenizer, OUTPUT_DIR, WORKING_DIR
+    from famie.api.active_learning.models import SeqLabel, XLMRobertaTokenizer, OUTPUT_DIR, WORKING_DIR, \
+        ConditionalSeqLabel
 
     import torch
     import trankit
@@ -185,12 +198,20 @@ def load_model_from_file(model_file):
                                                                   cache_dir=os.path.join(config.cache_dir,
                                                                                          config.target_embedding_name),
                                                                   do_lower_case=False)
+    if saved_ckpt['project_task_type'] == 'unconditional':
+        trained_model = SeqLabel(
+            config=config,
+            project_id=saved_ckpt['project_name'],
+            model_name='target'
+        )
+    else:
+        assert saved_ckpt['project_task_type'] == 'conditional'
+        trained_model = ConditionalSeqLabel(
+            config=config,
+            project_id=saved_ckpt['project_name'],
+            model_name='target'
+        )
 
-    trained_model = SeqLabel(
-        config=config,
-        project_id=saved_ckpt['project_name'],
-        model_name='target'
-    )
     if config.use_gpu:
         trained_model.cuda()
         trained_model.half()

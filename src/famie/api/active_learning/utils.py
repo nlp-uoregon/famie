@@ -19,6 +19,8 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 import torch.nn as nn
 from .constants import *
+import requests
+import zipfile
 
 for code in CODE2LANG:
     assert CODE2LANG[code] in trankit.supported_langs
@@ -84,8 +86,11 @@ def get_examples(project_name):
         if ex['example_id'] not in id2annotations:
             inst = deepcopy(ex)
             inst['project_name'] = project_name
+            inst['project_task_type'] = ex['project_task_type']
             inst['example_id'] = ex['example_id']
             inst['text'] = ex['text']
+            inst['anchor'] = ex['anchor']
+            inst['anchor_type'] = ex['anchor_type']
             inst['is_table'] = False
             inst['column_names'] = []
             inst['rows'] = []
@@ -146,7 +151,7 @@ def get_project_stats(project_name):
                 f.write(json.dumps({
                     'example_id': exid,
                     'spans': id2annotations[exid]
-                }) + '\n')
+                }, ensure_ascii=False) + '\n')
 
         with open(os.path.join(DATABASE_DIR, project_name, 'annotations.json')) as f:
             for line in f:
@@ -346,6 +351,7 @@ class ProxyDataset(Dataset):
         self.distil_file = os.path.join(project_dir, 'distillations.json')
         self.project_annotations = project_annotations
         self.project_provided_data = project_provided_data
+        self.init_data = []
 
         unlabeled_sample = None
         with open(os.path.join(self.project_dir, 'unlabeled-data.json')) as f:
@@ -356,14 +362,15 @@ class ProxyDataset(Dataset):
                     break
         if unlabeled_sample:
             self.lang = unlabeled_sample['lang']
+            self.project_task_type = unlabeled_sample['project_task_type']
         else:
             self.lang = 'english'
+            self.project_task_type = 'unconditional'
 
         self.trankit_dir = os.path.join(project_dir, 'trankit_features')
         ensure_dir(self.trankit_dir)
         self.data = []
-        self.numberize()
-        self.batch_num = len(self.data) // config.batch_size
+        self.batch_num = -1
 
     def update_data(self, project_annotations, project_provided_data=None):
         self.project_annotations = project_annotations
@@ -435,9 +442,11 @@ class ProxyDataset(Dataset):
                                       labels]
                         inst = {
                             'example_id': d['example_id'],
+                            'export': True,
                             'text': d['text'],
                             'tokens': tokens,
-
+                            'anchor': -1 if 'anchor' not in d else int(d['anchor']),
+                            'anchor_type': 'O' if 'anchor_type' not in d else d['anchor_type'],
                             'proxy_piece_idxs': proxy_piece_idxs,
                             'proxy_attention_mask': proxy_attn_masks,
                             'proxy_token_lens': proxy_token_lens,
@@ -468,12 +477,16 @@ class ProxyDataset(Dataset):
         torch.cuda.empty_cache()
 
         if self.project_provided_data:
+            c = 0
             for provided_example_id in self.project_provided_data:
                 with open(os.path.join(self.trankit_dir, '{}.json'.format(provided_example_id))) as f:
                     inst = json.load(f)
 
                 inst['label_idxs'] = [self.config.vocabs[self.project_id]['entity-label'].get(label, 0) for label in
                                       inst['labels']]
+                if sum(inst['label_idxs']) == 0:  # if no types of interest appear -> skip this example
+                    continue
+
                 inst['toklevel_spans'] = []  # not in use for now
 
                 if provided_example_id in id2tch_lbl_dist and provided_example_id in id2transitions:
@@ -483,20 +496,28 @@ class ProxyDataset(Dataset):
                     inst['tch_lbl_dist'] = []
                     inst['transitions'] = [0] * (len(inst['tokens']) + 1)
 
+                c += 1
+                inst['export'] = False
                 self.data.append(inst)
+            print('using {} pre-annotated examples for retraining'.format(c))
 
         self.output_labeled_data()
 
     def output_labeled_data(self):
         ensure_dir(os.path.join(OUTPUT_DIR, self.project_id))
         output_data = [{
+            'project_name': self.project_id,
+            'project_task_type': self.project_task_type,
             'example_id': inst['example_id'],
             'text': inst['text'],
-            'tokens': [t['text'] for t in inst['tokens']],
+            'tokens': inst['tokens'],
+            'anchor': inst['anchor'],
+            'anchor_type': inst['anchor_type'],
             'labels': inst['labels']
-        } for inst in self.data]
+        } for inst in self.data if 'export' in inst and inst['export']]
         with open(os.path.join(OUTPUT_DIR, self.project_id, 'labeled-data.json'), 'w') as f:
-            json.dump(output_data, f)
+            for d in output_data:
+                f.write(json.dumps(d, ensure_ascii=False) + '\n')
 
     def collate_fn(self, batch):
         example_ids = [inst['example_id'] for inst in batch]
@@ -558,6 +579,7 @@ class ProxyDataset(Dataset):
             example_ids=example_ids,
             texts=[inst['text'] for inst in batch],
             tokens=batch_tokens,
+            anchors=torch.cuda.LongTensor([inst['anchor'] for inst in batch]),
             piece_idxs=batch_piece_idxs,
             attention_masks=batch_attention_masks,
             token_lens=batch_token_lens,
@@ -577,12 +599,12 @@ class TargetDataset(Dataset):
         self.project_dir = project_dir
         self.project_annotations = project_annotations
         self.project_provided_data = project_provided_data
+        self.init_data = []
 
         self.trankit_dir = os.path.join(project_dir, 'trankit_features')
         ensure_dir(self.trankit_dir)
         self.data = []
-        self.numberize()
-        self.batch_num = len(self.data) // config.batch_size
+        self.batch_num = -1
 
     def update_data(self, project_annotations, project_provided_data=None):
         self.project_annotations = project_annotations
@@ -625,6 +647,9 @@ class TargetDataset(Dataset):
                                       inst['labels']]
                 inst['toklevel_spans'] = []  # not in use for now
 
+                if sum(inst['label_idxs']) == 0:  # if no types of interest appear -> skip this example
+                    continue
+
                 self.data.append(inst)
 
     def collate_fn(self, batch):
@@ -666,6 +691,7 @@ class TargetDataset(Dataset):
             example_ids=example_ids,
             texts=[inst['text'] for inst in batch],
             tokens=batch_tokens,
+            anchors=torch.cuda.LongTensor([inst['anchor'] for inst in batch]),
             piece_idxs=batch_piece_idxs,
             attention_masks=batch_attention_masks,
             token_lens=batch_token_lens,
@@ -741,6 +767,7 @@ class ALDataset(Dataset):
         return ALBatch(
             example_ids=example_ids,
             tokens=batch_tokens,
+            anchors=torch.cuda.LongTensor([inst['anchor'] for inst in batch]),
             piece_idxs=batch_piece_idxs,
             attention_masks=batch_attention_masks,
             token_lens=batch_token_lens,
@@ -770,7 +797,29 @@ def precompute_distillation(numberized_data, target_model, config, project_name)
 
     with open(os.path.join(DATABASE_DIR, project_name, 'distillations.json'), 'w') as f:
         for distil in distil_signals:
-            f.write(json.dumps(distil) + '\n')
+            f.write(json.dumps(distil, ensure_ascii=False) + '\n')
+
+
+def download(model_name, project_task_type, save_fpath):
+    def download_url(url):
+        print(url)
+        response = requests.get(url, stream=True)
+        total_size_in_bytes = int(response.headers.get('content-length', 0))
+        block_size = 1024
+        progress_bar = tqdm(total=total_size_in_bytes, unit='iB', unit_scale=True,
+                            desc='Downloading: ')
+
+        with open(save_fpath, 'wb') as file:
+            for data in response.iter_content(block_size):
+                progress_bar.update(len(data))
+                file.write(data)
+        progress_bar.close()
+
+    if not os.path.exists(save_fpath):
+        print('Downloading pretrained model')
+        download_url(url="http://nlp.uoregon.edu/download/famie-0.3.0/{}-{}.model.ckpt".format(model_name, project_task_type))
+    else:
+        print('Pretrained model is already downloaded to {}'.format(save_fpath))
 
 
 def mnlp_sampling(unlabeled_data, model, tokenizer, config, project_id):

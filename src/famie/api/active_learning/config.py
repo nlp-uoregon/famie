@@ -11,7 +11,7 @@ class Config:
         else:
             passed_args = {
                 'selection': 'mnlp',
-                'target_embedding': 'xlm-roberta-base',
+                'target_embedding': 'nreimers/mMiniLMv2-L12-H384-distilled-from-XLMR-Large',
                 'proxy_embedding': 'nreimers/mMiniLMv2-L6-H384-distilled-from-XLMR-Large'
             }
         # print('passed args: {}'.format(passed_args))
@@ -41,8 +41,8 @@ class Config:
         self.weight_decay = 1e-3
 
         self.batch_size = 16
-        self.proxy_max_epoch = 15
-        self.target_max_epoch = 30
+        self.proxy_max_epoch = 20
+        self.target_max_epoch = 40
         self.seed = 3456
         self.accumulate_step = 1
         self.grad_clipping = 4.5

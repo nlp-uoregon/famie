@@ -71,6 +71,11 @@ class MultilingualEmbedding(BaseModel):
 
     def __init__(self, config, model_name='proxy'):
         super(MultilingualEmbedding, self).__init__(config, model_name=model_name)
+        self.conditional = False
+
+    def set_conditional(self):
+        self.conditional = True
+        self.linear_trans = nn.Linear(self.xlmr_dim * 4, self.xlmr_dim)
 
     def get_tokenizer_inputs(self, batch):
         wordpiece_reprs = self.encode(
@@ -79,6 +84,20 @@ class MultilingualEmbedding(BaseModel):
         )
         return wordpiece_reprs
 
+    def get_anchor_reps(self, word_reprs, anchor_positions):
+        '''
+        :param word_reprs: [batch size, sequence length, rep dim]
+        :param anchor_positions: [batch size, ]
+        :return: anchor reprs: [batch size, rep dim]
+        '''
+        word_reprs = word_reprs.clone()
+        positions = anchor_positions.view(-1, 1).long()
+        positions = positions.expand(positions.size(0), word_reprs.size(2)).unsqueeze(1)
+
+        anchor_reprs = torch.gather(word_reprs, 1, positions)
+        anchor_reprs = anchor_reprs.squeeze(1)
+        return anchor_reprs
+
     def get_tagger_inputs(self, batch):
         # encoding
         word_reprs, cls_reprs = self.encode_words(
@@ -86,6 +105,17 @@ class MultilingualEmbedding(BaseModel):
             attention_masks=batch.attention_masks,
             word_lens=batch.token_lens
         )
+        if self.conditional and torch.sum(batch.anchors >= 0) == batch.anchors.shape[0]:
+            anchor_reprs = self.get_anchor_reps(word_reprs, batch.anchors).unsqueeze(1).repeat(1, word_reprs.shape[1],
+                                                                                               1)
+            tmp_reprs = torch.cat(
+                [word_reprs,
+                 anchor_reprs,
+                 word_reprs * anchor_reprs,
+                 torch.abs(word_reprs - anchor_reprs)], dim=2
+            )
+            word_reprs = self.linear_trans(tmp_reprs)
+
         return word_reprs, cls_reprs
 
 
@@ -354,7 +384,7 @@ class SeqLabel(nn.Module):
 
         return loss
 
-    def predict(self, raw_text):
+    def predict(self, raw_text, anchor_position=-1):
         tokens = self.config.trankit_tokenizer.tokenize(raw_text, is_sent=True)['tokens']
         piece_idxs, attn_masks, token_lens = subword_tokenize(
             tokens,
@@ -365,6 +395,7 @@ class SeqLabel(nn.Module):
             example_ids=['raw-text'],
             texts=[raw_text],
             tokens=[tokens],
+            anchors=torch.cuda.LongTensor([anchor_position]),
             piece_idxs=torch.cuda.LongTensor([piece_idxs]) if self.config.use_gpu else torch.LongTensor([piece_idxs]),
             attention_masks=torch.cuda.LongTensor([attn_masks]) if self.config.use_gpu else torch.LongTensor(
                 [attn_masks]),
@@ -389,7 +420,7 @@ class SeqLabel(nn.Module):
 
         return list(zip([t for t in tokens], label_preds[0]))
 
-    def proxy_predicts(self, project_id, example_id, raw_text, tokens):
+    def proxy_predicts(self, project_id, example_id, raw_text, tokens, anchor_position=-1):
         piece_idxs, attn_masks, token_lens = subword_tokenize(
             tokens,
             self.config.proxy_tokenizer,
@@ -399,6 +430,7 @@ class SeqLabel(nn.Module):
             example_ids=[example_id],
             texts=[raw_text],
             tokens=[tokens],
+            anchors=torch.cuda.LongTensor([anchor_position]),
             piece_idxs=torch.cuda.LongTensor([piece_idxs]) if self.config.use_gpu else torch.LongTensor([piece_idxs]),
             attention_masks=torch.cuda.LongTensor([attn_masks]) if self.config.use_gpu else torch.LongTensor(
                 [attn_masks]),
@@ -431,7 +463,7 @@ class SeqLabel(nn.Module):
             )
         return outputs
 
-    def target_predicts(self, project_id, example_id, raw_text, tokens):
+    def target_predicts(self, project_id, example_id, raw_text, tokens, anchor_position=-1):
         piece_idxs, attn_masks, token_lens = subword_tokenize(
             tokens,
             self.config.target_tokenizer,
@@ -441,6 +473,7 @@ class SeqLabel(nn.Module):
             example_ids=[example_id],
             texts=[raw_text],
             tokens=[tokens],
+            anchors=torch.cuda.LongTensor([anchor_position]),
             piece_idxs=torch.cuda.LongTensor([piece_idxs]) if self.config.use_gpu else torch.LongTensor([piece_idxs]),
             attention_masks=torch.cuda.LongTensor([attn_masks]) if self.config.use_gpu else torch.LongTensor(
                 [attn_masks]),
@@ -614,3 +647,131 @@ class SeqLabel(nn.Module):
             })
 
         return results
+
+
+class ConditionalSeqLabel(SeqLabel):
+    def __init__(self, config, project_id, model_name):
+        super(ConditionalSeqLabel, self).__init__(config, project_id, model_name)
+        self.embedding.set_conditional()
+
+    def predict(self, unconditional_pred, anchor_position=-1):
+        tokens = [tup[0] for tup in unconditional_pred]
+        piece_idxs, attn_masks, token_lens = subword_tokenize(
+            tokens,
+            self.config.target_tokenizer,
+            self.config.max_sent_length
+        )
+        batch = TargetBatch(
+            example_ids=['tokenized-text'],
+            texts=['not-provided'],
+            tokens=[tokens],
+            anchors=torch.cuda.LongTensor([anchor_position]),
+            piece_idxs=torch.cuda.LongTensor([piece_idxs]) if self.config.use_gpu else torch.LongTensor([piece_idxs]),
+            attention_masks=torch.cuda.LongTensor([attn_masks]) if self.config.use_gpu else torch.LongTensor(
+                [attn_masks]),
+            token_lens=[token_lens],
+            label_idxs=[0] * len(tokens),
+            token_nums=torch.cuda.LongTensor([len(tokens)]) if self.config.use_gpu else torch.LongTensor([len(tokens)]),
+            distill_mask=[0]
+        )
+
+        word_reprs, _ = self.embedding.get_tagger_inputs(batch)
+        batch_size, _, _ = word_reprs.size()
+
+        h_t = self.penultimate_ffn(word_reprs)
+        label_scores = self.label_ffn(h_t)
+        label_scores = self.crf.pad_logits(label_scores)
+        _, label_pred_ids = self.crf.viterbi_decode(label_scores, batch.token_nums)
+        label_pred_ids = label_pred_ids.data.cpu().numpy().tolist()
+        label_preds = []
+        for bid in range(batch_size):
+            pred = [self.label_itos[lid] for lid in label_pred_ids[bid][:batch.token_nums[bid]]]
+            label_preds.append(pred)
+
+        return list(zip([t for t in tokens], label_preds[0]))
+
+    def proxy_predicts(self, project_id, example_id, raw_text, tokens, anchor_position=-1):
+        piece_idxs, attn_masks, token_lens = subword_tokenize(
+            tokens,
+            self.config.proxy_tokenizer,
+            self.config.max_sent_length
+        )
+        batch = TargetBatch(
+            example_ids=[example_id],
+            texts=[raw_text],
+            tokens=[tokens],
+            anchors=torch.cuda.LongTensor([anchor_position]),
+            piece_idxs=torch.cuda.LongTensor([piece_idxs]) if self.config.use_gpu else torch.LongTensor([piece_idxs]),
+            attention_masks=torch.cuda.LongTensor([attn_masks]) if self.config.use_gpu else torch.LongTensor(
+                [attn_masks]),
+            token_lens=[token_lens],
+            label_idxs=[0] * len(tokens),
+            token_nums=torch.cuda.LongTensor([len(tokens)]) if self.config.use_gpu else torch.LongTensor([len(tokens)]),
+            distill_mask=[0]
+        )
+
+        word_reprs, _ = self.embedding.get_tagger_inputs(batch)
+        batch_size, _, _ = word_reprs.size()
+
+        h_t = self.penultimate_ffn(word_reprs)
+        label_scores = self.label_ffn(h_t)
+        label_scores = self.crf.pad_logits(label_scores)
+        _, label_pred_ids = self.crf.viterbi_decode(label_scores, batch.token_nums)
+        spans = tag_paths_to_spans(label_pred_ids, batch.token_nums, self.config.vocabs[project_id]['entity-label'])[0]
+
+        outputs = []
+        for ssid, span in enumerate(spans):
+            start, end, label = span
+            start_char = tokens[start]['span'][0]
+            end_char = tokens[end - 1]['span'][1]
+            outputs.append(
+                {'start': start_char, 'end': end_char,
+                 'entityId': self.config.vocabs[project_id]['entity-type'][label],
+                 'id': "{}-ss{}".format(example_id, ssid),
+                 'text': raw_text[start_char: end_char]
+                 }
+            )
+        return outputs
+
+    def target_predicts(self, project_id, example_id, raw_text, tokens, anchor_position=-1):
+        piece_idxs, attn_masks, token_lens = subword_tokenize(
+            tokens,
+            self.config.target_tokenizer,
+            self.config.max_sent_length
+        )
+        batch = TargetBatch(
+            example_ids=[example_id],
+            texts=[raw_text],
+            tokens=[tokens],
+            anchors=torch.cuda.LongTensor([anchor_position]),
+            piece_idxs=torch.cuda.LongTensor([piece_idxs]) if self.config.use_gpu else torch.LongTensor([piece_idxs]),
+            attention_masks=torch.cuda.LongTensor([attn_masks]) if self.config.use_gpu else torch.LongTensor(
+                [attn_masks]),
+            token_lens=[token_lens],
+            label_idxs=[0] * len(tokens),
+            token_nums=torch.cuda.LongTensor([len(tokens)]) if self.config.use_gpu else torch.LongTensor([len(tokens)]),
+            distill_mask=[0]
+        )
+
+        word_reprs, _ = self.embedding.get_tagger_inputs(batch)
+        batch_size, _, _ = word_reprs.size()
+
+        h_t = self.penultimate_ffn(word_reprs)
+        label_scores = self.label_ffn(h_t)
+        label_scores = self.crf.pad_logits(label_scores)
+        _, label_pred_ids = self.crf.viterbi_decode(label_scores, batch.token_nums)
+        spans = tag_paths_to_spans(label_pred_ids, batch.token_nums, self.config.vocabs[project_id]['entity-label'])[0]
+
+        outputs = []
+        for ssid, span in enumerate(spans):
+            start, end, label = span
+            start_char = tokens[start]['span'][0]
+            end_char = tokens[end - 1]['span'][1]
+            outputs.append(
+                {'start': start_char, 'end': end_char,
+                 'entityId': self.config.vocabs[project_id]['entity-type'][label],
+                 'id': "{}-ss{}".format(example_id, ssid),
+                 'text': raw_text[start_char: end_char]
+                 }
+            )
+        return outputs

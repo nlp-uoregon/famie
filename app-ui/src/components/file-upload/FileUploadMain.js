@@ -55,7 +55,7 @@ const FileUploadForm = (props) => {
             />
         )
     }else{
-        const title = props.wikiData? "Load a csv file with the wikipedia urls or paths.": "Load a plaintext file, each line contains one sentence.";
+        const title = props.wikiData? "Load a csv file with the wikipedia urls or paths.": "For event detection, load a plaintext file, each line contains one sentence. For event argument extraction, load a JSON file.";
         const defaultColumns = props.wikiData? [DEFAULT_WIKI_COLUMN]: [DEFAULT_TEXT_COLUMN];
         const helpTextLink =  props.wikiData? WIKI_DOCS_FILE_FORMAT: DOCS_TEXT_FILE_FORMAT;
 

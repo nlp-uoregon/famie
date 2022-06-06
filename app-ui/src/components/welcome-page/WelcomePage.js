@@ -33,6 +33,9 @@ const projectTypes = [
     'explanation': 'Event Detection',
     'needParams': true},
     {'type': PROJECT_TYPES.ner,
+    'explanation': 'Event Argument Extraction',
+    'needParams': true},
+    {'type': PROJECT_TYPES.ner,
     'explanation': 'Named Entity Recognition',
     'needParams': true}
 ];

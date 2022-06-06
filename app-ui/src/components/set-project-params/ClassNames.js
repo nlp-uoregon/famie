@@ -212,7 +212,7 @@ class ClassNames extends React.Component{
                     id={"contained-button-file-2"}
                     helpText={<p>File is empty.</p>}
                     rootClassName={classes.top_container}
-                    instructionText={"Load a BIO-format file."}
+                    instructionText={"Load a JSON file."}
                     defaultColumnNames={[DEFAULT_CLASS_NAME_COLUMN]}
                     createProject={this.uploadLabeledData}
                     projectName={this.props.projectName}

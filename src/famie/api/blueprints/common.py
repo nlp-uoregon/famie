@@ -17,9 +17,9 @@ from famie.api.api_fns.project_creation.common import get_upload_key
 from famie.api.api_fns.project_creation.supervised import create_supervised_project
 
 from famie.constants import (ALL_PROJECT_TYPES,
-                              PROJECT_TYPE_CLASSIFICATION,
-                              PROJECT_TYPE_ED,
-                              PROJECT_TYPE_NER)
+                             PROJECT_TYPE_CLASSIFICATION,
+                             PROJECT_TYPE_ED,
+                             PROJECT_TYPE_NER)
 from famie.api.active_learning.controllers import *
 from famie.api.active_learning.config import config
 
@@ -94,10 +94,11 @@ def upload():
 
     upload_folder = os.path.join(DATABASE_DIR, project_name)
     ensure_dir(upload_folder)
-    project_id = create_supervised_project(*input_params, upload_folder)
+    project_id, project_task_type = create_supervised_project(*input_params, upload_folder)
 
     update_project_to_database(project_info={
-        'id': project_id, 'name': project_name, 'type': project_type, 'classes': [], 'index_name': project_name, 'filename': os.path.join(upload_folder, 'unlabeled-data.json')
+        'id': project_id, 'name': project_name, 'type': project_type, 'project_task_type': project_task_type,
+        'classes': [], 'index_name': project_name, 'filename': os.path.join(upload_folder, 'unlabeled-data.json')
     })
 
     if project_id:
@@ -141,6 +142,5 @@ def export_labels_api():
         return ''
     else:
         with open(labeled_fpath) as f:
-            data = json.load(f)
-        return json.dumps({'project_name': project_name, 'data': data})
-
+            data = f.read().strip()
+        return data
