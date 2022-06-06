@@ -166,14 +166,10 @@ def get_docs():  # start the annotation and the training of the target model her
     with open(os.path.join(DATABASE_DIR, project_name, 'selected-unlabeled-data.json')) as f:
         selected_unlabeled = [json.loads(line.strip()) for line in f if line.strip()]
 
-    '''
-    if len(selected_unlabeled) > 0 and selected_unlabeled[0]['project_task_type'] == 'conditional':
-        # toy visualization
-        for example in selected_unlabeled:
-            example['text'] = example['text'] + ' (trigger: {}, event type: {})'.format(
-                example['tokens'][example['anchor']]['text'],
-                example['anchor_type'])
-    '''
+    for example in selected_unlabeled:
+        example['text'] = example['text'] + ' (trigger: {}, event type: {})'.format(
+            example['tokens'][example['anchor']]['text'],
+            example['anchor_type'])
 
     res = {
         'total': len(selected_unlabeled),
